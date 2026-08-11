@@ -144,19 +144,18 @@ scripts-management/
 | Tauri v2 + Vue 3 + Bun scaffold | done (app window runs) |
 | Sidebar navigation (Home / Scripts List / Task / Setting) | done |
 | Header / Body / Footer layout for every view | done |
+| Sidebar icons (inline SVG, zero-dependency) | done |
 | Script domain model | done |
 | ScriptRepository boundary + JSON store (testable) | done |
+| Tailwind CSS v4 styling (utilities, dark mode) | done |
+| Real storage: TauriFileStorage → Rust read/write commands in app-data dir | done |
+| Script import: Add File / Add Folder (dialog picker, recursive .py scan, dedupe) | done |
 
 **Planned (next slices, each TDD + committed):**
 
-1. **TauriFileStorage adapter** — real disk I/O via the Tauri v2 fs plugin
-   (Rust plugin registration + capability permission + frontend adapter);
-   completes the boundary with actual JSON files in the app-data dir.
-2. **Scripts List view** — consume the repository in the UI: list + create
-   scripts (composable + component tests).
-3. **Task view** — schedule / run Python scripts (likely Rust commands via
-   `invoke()`).
-4. **Setting view** — app configuration persisted through the same boundary.
+1. **Run / edit scripts** — execute managed scripts (Rust command invoking `python.exe`), view script content.
+2. **Task view** — schedule scripts (cron-style); likely Rust commands via `invoke()`.
+3. **Setting view** — app configuration persisted through the same boundary.
 
 ## 8. Development Workflow (how this repo is built)
 
