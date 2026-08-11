@@ -5,6 +5,11 @@ import HomeView from './views/HomeView.vue';
 import ScriptsListView from './views/ScriptsListView.vue';
 import TaskView from './views/TaskView.vue';
 import SettingView from './views/SettingView.vue';
+import HomeIcon from './components/icons/HomeIcon.vue';
+import ScriptsListIcon from './components/icons/ScriptsListIcon.vue';
+import TaskIcon from './components/icons/TaskIcon.vue';
+import SettingIcon from './components/icons/SettingIcon.vue';
+import type { Component } from 'vue';
 
 const { navItems, activeView, setView } = useNavigation();
 
@@ -22,6 +27,13 @@ const views = computed(() => {
       return HomeView;
   }
 });
+
+const viewIcons: Record<string, Component> = {
+  home: HomeIcon,
+  'scripts-list': ScriptsListIcon,
+  task: TaskIcon,
+  setting: SettingIcon,
+};
 </script>
 
 <template>
@@ -35,10 +47,11 @@ const views = computed(() => {
           :aria-current="activeView === item.id ? 'page' : undefined"
         >
           <button
-            class="nav-button block w-full px-4 py-3 text-left rounded hover:bg-gray-300 transition-all duration-200 dark:text-[#f6f6f6] dark:hover:bg-[#404040] [&.active]:bg-blue-600 [&.active]:text-white dark:[&.active]:bg-blue-600 dark:[&.active]:text-white"
+            class="nav-button flex w-full items-center gap-2.5 px-4 py-3 text-left rounded hover:bg-gray-300 transition-all duration-200 dark:text-[#f6f6f6] dark:hover:bg-[#404040] [&.active]:bg-blue-600 [&.active]:text-white dark:[&.active]:bg-blue-600 dark:[&.active]:text-white"
             :class="{ active: activeView === item.id }"
             @click="setView(item.id)"
           >
+            <component :is="viewIcons[item.id]" />
             {{ item.label }}
           </button>
         </li>

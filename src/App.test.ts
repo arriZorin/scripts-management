@@ -214,4 +214,26 @@ describe('App', () => {
     app.unmount();
     document.body.removeChild(container);
   });
+
+  it('renders an svg icon inside each of the 4 nav buttons', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    
+    const app = createApp(App);
+    
+    app.mount(container);
+    await nextTick();
+    
+    // Check for navigation buttons with exact labels
+    const buttons = container.querySelectorAll('nav button');
+    
+    expect(buttons.length).toBe(4);
+    
+    // Each button should contain exactly one svg element
+    const svgCounts = Array.from(buttons).map(btn => btn.querySelectorAll('svg').length);
+    expect(svgCounts.every(count => count === 1)).toBe(true);
+    
+    app.unmount();
+    document.body.removeChild(container);
+  });
 });
