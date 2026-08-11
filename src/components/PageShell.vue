@@ -7,18 +7,18 @@
 </script>
 
 <template>
-  <div class="page-shell">
-    <header class="region header">
+  <div class="page-shell flex flex-col min-h-full">
+    <header class="region header p-4 m-2 rounded border border-gray-300 bg-gray-100 dark:bg-[#2f2f2f] dark:border-[#404040]">
       <slot name="header">
         <div class="header-content">Header</div>
       </slot>
     </header>
-    <main class="region body">
+    <main class="region body p-4 m-2 rounded border border-gray-300 flex-grow dark:bg-[#333333] dark:border-[#404040]">
       <slot name="body">
         <div class="body-content">Body</div>
       </slot>
     </main>
-    <footer class="region footer">
+    <footer class="region footer p-4 m-2 rounded border border-gray-300 bg-gray-100 dark:bg-[#2f2f2f] dark:border-[#404040]">
       <slot name="footer">
         <div class="footer-content">Footer</div>
       </slot>
@@ -26,47 +26,4 @@
   </div>
 </template>
 
-<style scoped>
-.page-shell {
-  display: flex;
-  flex-direction: column;
-  min-height: 100%;
-}
 
-.region {
-  flex: 1;
-  padding: 1rem;
-  margin: 0.5rem;
-  border: 1px solid #e0e0e0;
-  border-radius: 0.25rem;
-}
-
-.header {
-  background-color: #f5f5f5;
-  border-top-left-radius: 0.5rem;
-  border-top-right-radius: 0.5rem;
-}
-
-.body {
-  background-color: #ffffff;
-  flex-grow: 1;
-}
-
-.footer {
-  background-color: #f5f5f5;
-  border-bottom-left-radius: 0.5rem;
-  border-bottom-right-radius: 0.5rem;
-}
-
-@media (prefers-color-scheme: dark) {
-  .header,
-  .footer {
-    background-color: #2f2f2f;
-    border-color: #404040;
-  }
-  
-  .body {
-    background-color: #333333;
-  }
-}
-</style>

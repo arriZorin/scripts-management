@@ -25,9 +25,9 @@ const views = computed(() => {
 </script>
 
 <template>
-  <div class="app-container">
-    <nav class="sidebar">
-      <ul>
+  <div class="app-container flex min-h-screen w-full">
+    <nav class="sidebar w-52 border-r border-gray-300 bg-gray-100 flex-shrink-0 dark:bg-[#2f2f2f] dark:border-[#404040]">
+      <ul class="space-y-1">
         <li
           v-for="item in navItems"
           :key="item.id"
@@ -35,7 +35,7 @@ const views = computed(() => {
           :aria-current="activeView === item.id ? 'page' : undefined"
         >
           <button
-            class="nav-button"
+            class="nav-button block w-full px-4 py-3 text-left rounded hover:bg-gray-300 transition-all duration-200 dark:text-[#f6f6f6] dark:hover:bg-[#404040] [&.active]:bg-blue-600 [&.active]:text-white dark:[&.active]:bg-blue-600 dark:[&.active]:text-white"
             :class="{ active: activeView === item.id }"
             @click="setView(item.id)"
           >
@@ -44,75 +44,10 @@ const views = computed(() => {
         </li>
       </ul>
     </nav>
-    <main class="main-content">
+    <main class="main-content flex-1 p-4 overflow-y-auto">
       <component :is="views" />
     </main>
   </div>
 </template>
 
-<style scoped>
-.app-container {
-  display: flex;
-  min-height: 100vh;
-}
 
-.sidebar {
-  width: 200px;
-  background-color: #f5f5f5;
-  border-right: 1px solid #e0e0e0;
-  padding: 1rem 0;
-  flex-shrink: 0;
-}
-
-.main-content {
-  flex-grow: 1;
-  padding: 1rem;
-  overflow-y: auto;
-}
-
-.nav-item {
-  margin: 0.25rem 0;
-}
-
-.nav-button {
-  width: 100%;
-  padding: 0.75rem 1rem;
-  background: transparent;
-  border: none;
-  text-align: left;
-  cursor: pointer;
-  font-size: 1rem;
-  color: #333;
-  border-radius: 0.375rem;
-  transition: background-color 0.2s, color 0.2s;
-}
-
-.nav-button:hover {
-  background-color: #e0e0e0;
-}
-
-.nav-button.active {
-  background-color: #007bff;
-  color: white;
-}
-
-@media (prefers-color-scheme: dark) {
-  .sidebar {
-    background-color: #2f2f2f;
-    border-right-color: #404040;
-  }
-
-  .nav-button {
-    color: #f6f6f6;
-  }
-
-  .nav-button:hover {
-    background-color: #404040;
-  }
-
-  .nav-button.active {
-    background-color: #007bff;
-    color: white;
-  }
-}
-</style>

@@ -2,54 +2,24 @@
 </script>
 
 <template>
-  <div class="view-container">
-    <header class="region header">
-      <h1>Scripts List</h1>
-      <p>Manage your Python scripts</p>
+  <div class="view-container w-full">
+    <header class="region header p-4 m-2 rounded border border-gray-300 bg-gray-100 mb-4 dark:bg-[#2f2f2f] dark:border-[#404040]">
+      <slot name="header">
+        <h1 class="text-xl font-semibold">Scripts List</h1>
+        <p class="text-gray-600">Manage your Python scripts</p>
+      </slot>
     </header>
-    <main class="region body">
-      <p>This is the scripts list view content.</p>
+    <main class="region body p-4 m-2 rounded border border-gray-300 bg-white min-h-[200px] dark:bg-[#333333] dark:border-[#404040]">
+      <slot name="body">
+        <p class="text-gray-500">This is the scripts list view content.</p>
+      </slot>
     </main>
-    <footer class="region footer">
-      <p>&copy; 2026 Scripts Management</p>
+    <footer class="region footer p-4 m-2 rounded border border-gray-300 bg-gray-100 mt-4 text-center text-sm text-gray-500 dark:bg-[#2f2f2f] dark:border-[#404040] dark:text-[#999999]">
+      <slot name="footer">
+        <p>&copy; 2026 Scripts Management</p>
+      </slot>
     </footer>
   </div>
 </template>
 
-<style scoped>
-.view-container {
-  width: 100%;
-}
 
-.header {
-  padding: 1rem;
-  border-bottom: 1px solid #e0e0e0;
-  margin-bottom: 1rem;
-}
-
-.body {
-  padding: 1rem;
-  min-height: 200px;
-}
-
-.footer {
-  padding: 1rem;
-  border-top: 1px solid #e0e0e0;
-  margin-top: 1rem;
-  text-align: center;
-  font-size: 0.875rem;
-  color: #666;
-}
-
-@media (prefers-color-scheme: dark) {
-  .header,
-  .body {
-    border-color: #404040;
-  }
-
-  .footer {
-    border-color: #404040;
-    color: #999;
-  }
-}
-</style>
