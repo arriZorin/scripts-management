@@ -7,25 +7,32 @@ export function filterPyFiles(paths: string[]): string[] {
 		.map(p => paths[lowerPaths.indexOf(p)])
 }
 
+function normalizePath(p: string): string {
+	return p.replace(/\\/g, '/')
+}
+
 export function toScriptInputs(paths: string[], existingPaths: string[]): ScriptInput[] {
-	const existingSet = new Set(existingPaths)
+	// Canonicalize separators so a file picked via the dialog (D:\...) and the
+	// same file found by scan_files (D:/...) dedupe as one entry.
+	const existingSet = new Set(existingPaths.map(normalizePath))
 	const seen = new Set<string>()
 
 	const result: ScriptInput[] = []
 
 	for (const path of paths) {
-		if (existingSet.has(path)) {
+		const normalized = normalizePath(path)
+		if (existingSet.has(normalized)) {
 			continue
 		}
-		if (seen.has(path)) {
+		if (seen.has(normalized)) {
 			continue
 		}
-		seen.add(path)
+		seen.add(normalized)
 
-		const name = path.split(/[/\\]/).pop() ?? path
+		const name = normalized.split('/').pop() ?? normalized
 		result.push({
 			name,
-			path,
+			path: normalized,
 			type: 'python',
 		})
 	}

@@ -27,7 +27,7 @@ describe('toScriptInputs', () => {
 	it('maps name/path/type correctly for mixed separators', () => {
 		const paths = [
 			'C:/work/backup.py',
-			'D:\\\\work\\\\cleanup.py',
+			'D:\\work\\cleanup.py',
 		]
 		const result = toScriptInputs(paths, [])
 		expect(result).toHaveLength(2)
@@ -38,9 +38,34 @@ describe('toScriptInputs', () => {
 		})
 		expect(result[1]).toMatchObject<ScriptInput>({
 			name: 'cleanup.py',
-			path: 'D:\\\\work\\\\cleanup.py',
+			path: 'D:/work/cleanup.py',
 			type: 'python',
 		})
+	})
+
+	it('stores paths in canonical forward-slash form', () => {
+		const result = toScriptInputs(['D:\\work\\cleanup.py'], [])
+		expect(result).toHaveLength(1)
+		expect(result[0].path).toBe('D:/work/cleanup.py')
+	})
+
+	it('skips an existing path even when separators differ (dialog vs folder scan)', () => {
+		const existing = ['D:\\work\\backup.py'] as string[]
+		const paths = ['D:/work/backup.py', 'D:/work/cleanup.py'] as string[]
+		const result = toScriptInputs(paths, existing)
+		expect(result).toHaveLength(1)
+		expect(result[0].name).toBe('cleanup.py')
+	})
+
+	it('dedupes within input across separator styles', () => {
+		const paths = [
+			'D:/work/a.py',
+			'D:\\work\\a.py',
+			'D:\\work\\b.py',
+		] as string[]
+		const result = toScriptInputs(paths, [])
+		expect(result).toHaveLength(2)
+		expect(result.map((r) => r.name)).toEqual(['a.py', 'b.py'])
 	})
 
 	it('skips existing paths', () => {
