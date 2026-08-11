@@ -18,8 +18,8 @@ class FakeScriptRepository {
     const s = {
       ...input,
       id: crypto.randomUUID(),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: '2024-01-01T00:00:00.000Z', // Fixed date for testing
+      updatedAt: '2024-01-01T00:00:00.000Z',
     }
     this.items.push(s)
     return Promise.resolve(s)
@@ -90,7 +90,7 @@ describe('ScriptsListView', () => {
     expect(container.querySelector('.region.header h1')?.textContent?.trim()).toBe('Scripts List')
     expect(container.querySelector('.region.header p')?.textContent?.trim()).toBe('Manage your Python scripts')
     expect(container.querySelector('.region.footer')?.textContent?.trim()).toBe('© 2026 Scripts Management')
-    expect(buttonTexts(container)).toEqual(['Add File', 'Add Folder'])
+    expect(buttonTexts(container).sort()).toEqual(['Add File', 'Add Folder', 'Refresh'])
 
     app.unmount()
   })
@@ -124,8 +124,9 @@ describe('ScriptsListView', () => {
     addBtn.click()
     await flush()
 
-    const listItems = Array.from(container.querySelectorAll('.region.body li')).map((li) => li.textContent)
-    expect(listItems).toEqual(['backup.py — C:/scripts/backup.py'])
+    const rows = Array.from(container.querySelectorAll('tbody tr'))
+    const listItems = rows.map((row) => row.textContent)
+    expect(listItems).toEqual(['backup.pyC:/scripts/backup.py2024-01-01T00:00:00.000Z'])
     expect(container.querySelector('.region.body')?.textContent).toContain('Added 0 script(s), skipped 1.')
 
     app.unmount()
@@ -142,8 +143,11 @@ describe('ScriptsListView', () => {
     addBtn.click()
     await flush()
 
-    const listItems = Array.from(container.querySelectorAll('.region.body li')).map((li) => li.textContent)
-    expect(listItems).toEqual(['new.py — C:/scripts/new.py'])
+    const rows = Array.from(container.querySelectorAll('tbody tr'))
+    expect(rows).toHaveLength(1)
+    const row = rows[0]
+    expect(row.textContent).toContain('new.py')
+    expect(row.textContent).toContain('C:/scripts/new.py')
 
     app.unmount()
   })
@@ -161,10 +165,83 @@ describe('ScriptsListView', () => {
     addBtn.click()
     await flush()
 
-    const contents = Array.from(container.querySelectorAll('.region.body li')).map((li) => li.textContent)
-    expect(contents).toContain('x.py — C:/a/x.py')
-    expect(contents).toContain('y.py — C:/a/y.py')
-    expect(contents).not.toContain('readme.txt')
+    const rows = Array.from(container.querySelectorAll('tbody tr'))
+    expect(rows).toHaveLength(2)
+    // Check individual td cells in each row
+    const firstRowCells = Array.from(rows[0].querySelectorAll('td')).map(td => td.textContent)
+    const secondRowCells = Array.from(rows[1].querySelectorAll('td')).map(td => td.textContent)
+    expect(firstRowCells).toContain('x.py')
+    expect(firstRowCells).toContain('C:/a/x.py')
+    // First 3 cells should be: name, path, type - the 4th is created date which varies
+    expect(firstRowCells[0]).toBe('x.py')
+    expect(firstRowCells[1]).toBe('C:/a/x.py')
+    expect(firstRowCells[2]).toBe('python')
+    expect(firstRowCells[3]).toContain('2024') // At least contains the year
+    expect(secondRowCells).toContain('y.py')
+    expect(secondRowCells).toContain('C:/a/y.py')
+    expect(secondRowCells[0]).toBe('y.py')
+    expect(secondRowCells[1]).toBe('C:/a/y.py')
+    expect(secondRowCells[2]).toBe('python')
+    expect(secondRowCells[3]).toContain('2024')
+
+    app.unmount()
+  })
+
+  it('renders saved scripts from the repository on mount without any interaction', async () => {
+    const repo = new FakeScriptRepository([
+      {
+        id: 'test-1',
+        name: 'backup.py',
+        path: 'C:/scripts/backup.py',
+        type: 'python',
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+      },
+    ])
+    const { container, app } = mountView(repo, new FakeScriptPicker(), new FakeFileScanner())
+    await nextTick()
+    await flush()
+
+    const rows = Array.from(container.querySelectorAll('tbody tr'))
+    expect(rows).toHaveLength(1)
+    const row = rows[0]
+    expect(row.textContent).toContain('backup.py')
+    expect(row.textContent).toContain('C:/scripts/backup.py')
+    expect(row.textContent).toContain('python')
+    expect(row.textContent).toContain('2024-01-01')
+
+    app.unmount()
+  })
+
+  it('Refresh button reloads the list when clicked', async () => {
+    const repo = new FakeScriptRepository()
+    const { container, app } = mountView(repo, new FakeScriptPicker(), new FakeFileScanner())
+    await nextTick()
+    await flush()
+
+    // Empty repo → no rows after the initial auto-load
+    expect(Array.from(container.querySelectorAll('tbody tr'))).toHaveLength(0)
+
+    // External change: a script lands in the store after mount
+    repo.items.push({
+      id: 'test-2',
+      name: 'late.py',
+      path: 'C:/scripts/late.py',
+      type: 'python',
+      createdAt: '2024-01-02T00:00:00.000Z',
+      updatedAt: '2024-01-02T00:00:00.000Z',
+    })
+
+    const refreshBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent?.trim() === 'Refresh'
+    )!
+    refreshBtn.click()
+    await flush()
+
+    const rows = Array.from(container.querySelectorAll('tbody tr'))
+    expect(rows).toHaveLength(1)
+    expect(rows[0].textContent).toContain('late.py')
+    expect(rows[0].textContent).toContain('C:/scripts/late.py')
 
     app.unmount()
   })
