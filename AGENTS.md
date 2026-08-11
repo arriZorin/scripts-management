@@ -105,6 +105,11 @@ fixed technology and UX constraints:
   management; do not introduce npm, pnpm, or yarn as the project package
   manager.
 - Frontend: Vue 3.
+- UI styling: Tailwind CSS v4, wired via the `@tailwindcss/vite` plugin
+  (CSS-first configuration — no `tailwind.config.js`; global entry imported in
+  `src/main.ts`). UI components use Tailwind utility classes; keep semantic
+  hook classes (e.g. `region header/body/footer`) that tests and selectors
+  depend on.
 - Managed scripts: Python scripts. Features that create, edit, list, schedule,
   or execute scripts must treat Python as the supported script type unless the
   user explicitly expands the scope.
