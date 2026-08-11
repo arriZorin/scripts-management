@@ -1,0 +1,11 @@
+{
+    "bill_number": "B-2026-0001",
+    "date": "2026-08-11",
+    "customer": "Acme Corp",
+    "currency": "$",
+    "tax_rate": 8,
+    "items": [
+        {"name": "Web design", "quantity": 1, "unit_price": 1200.00},
+        {"name": "Hosting (monthly)", "quantity": 12, "unit_price": 9.99}
+    ]
+}
