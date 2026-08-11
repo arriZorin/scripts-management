@@ -6,10 +6,10 @@ function createFakeFileStorage(): { storage: FileStorage & { store: Map<string, 
   const storageMap = new Map<string, string>()
   const storage: FileStorage & { store: Map<string, string> } = {
     store: storageMap,
-    read(path: string): Promise<string> {
+    read(path: string): Promise<string | null> {
       const value = storageMap.get(path)
       if (value === undefined) {
-        throw new Error('ENOENT: no such file')
+        return Promise.resolve(null)
       }
       return Promise.resolve(value)
     },

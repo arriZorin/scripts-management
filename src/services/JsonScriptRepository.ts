@@ -13,17 +13,10 @@ export class JsonScriptRepository implements ScriptRepository {
   }
 
   private async readScripts(): Promise<Script[]> {
-    try {
-      const content = await this.fileStorage.read(this.scriptsFilePath)
-      const scripts: Script[] = JSON.parse(content)
-      return Array.isArray(scripts) ? scripts : []
-    } catch (error) {
-      const enoentError = error instanceof Error && error.message === 'ENOENT: no such file'
-      if (enoentError) {
-        return []
-      }
-      throw error
-    }
+    const content = await this.fileStorage.read(this.scriptsFilePath)
+    if (content === null) return []
+    const scripts: Script[] = JSON.parse(content)
+    return Array.isArray(scripts) ? scripts : []
   }
 
   private async writeScripts(scripts: Script[]): Promise<void> {
