@@ -233,13 +233,17 @@ it('syncs enable state changes to the scheduler', async () => {
   const repository = new FakeTaskRepository()
   await repository.create({ name: 'Existing', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', time: '08:00' }, enabled: true })
   const scheduler = new FakeTaskScheduler()
-  const { container, app } = mountView(repository, new FakeTaskExecutor(), scheduler)
+  const logger = new FakeLogger()
+  const { container, app } = mountView(repository, new FakeTaskExecutor(), scheduler, logger)
   await flush()
 
   ;(container.querySelector('[data-testid="toggle-task-task-1"]') as HTMLElement).click()
   await flush()
 
   expect(scheduler.enabledCalls).toEqual([{ id: 'task-1', enabled: false }])
+  expect(logger.records[0].message).toContain('update=')
+  expect(logger.records[0].message).toContain('set=')
+  expect(logger.records[0].message).toContain('load=')
   app.unmount()
 })
 

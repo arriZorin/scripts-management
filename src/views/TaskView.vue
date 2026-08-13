@@ -117,11 +117,20 @@ async function save() {
 async function toggle(task: Task) {
   operationError.value = ''
   const started = performance.now()
+  const step = (name: string, at: number) => `${name}=${Math.round(at - started)}ms`
   try {
     const updated = await taskRepository.update(task.id, { enabled: !task.enabled })
+    const afterUpdate = performance.now()
     await taskScheduler.setEnabled(updated.id, updated.enabled)
-    await props.logger?.record('task.toggle', `toggle ${updated.name}: ${updated.enabled ? 'enabled' : 'disabled'}`, 'info', Math.round(performance.now() - started))
+    const afterSet = performance.now()
     await load()
+    const afterLoad = performance.now()
+    await props.logger?.record(
+      'task.toggle',
+      `toggle ${updated.name}: ${updated.enabled ? 'enabled' : 'disabled'} (${step('update', afterUpdate)} ${step('set', afterSet)} ${step('load', afterLoad)})`,
+      'info',
+      Math.round(afterLoad - started),
+    )
   } catch (cause) {
     operationError.value = errorText(cause, 'Failed to update task.')
     await props.logger?.record('task.toggle', `toggle ${task.name} failed: ${operationError.value}`, 'error', Math.round(performance.now() - started))
