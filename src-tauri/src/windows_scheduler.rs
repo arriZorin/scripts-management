@@ -19,7 +19,9 @@ use winapi::um::taskschd::{
     IAction, IActionCollection, IDailyTrigger, IExecAction, IRegisteredTask, IRegistrationInfo,
     IRepetitionPattern, ITaskDefinition, ITaskFolder, ITaskService, ITaskSettings, ITrigger,
     ITriggerCollection, IWeeklyTrigger, TaskScheduler, TASK_ACTION_EXEC, TASK_CREATE_OR_UPDATE,
-    TASK_LOGON_INTERACTIVE_TOKEN, TASK_TRIGGER_DAILY, TASK_TRIGGER_TIME, TASK_TRIGGER_WEEKLY,
+    TASK_LOGON_INTERACTIVE_TOKEN, TASK_STATE_DISABLED, TASK_STATE_QUEUED, TASK_STATE_READY,
+    TASK_STATE_RUNNING, TASK_STATE_UNKNOWN, TASK_TRIGGER_DAILY, TASK_TRIGGER_TIME,
+    TASK_TRIGGER_WEEKLY,
 };
 use winapi::{Class, Interface};
 
@@ -458,6 +460,37 @@ pub fn run_task(task_name: &str) -> Result<String, String> {
     Ok(format!("started {}", task_name))
 }
 
+/// Maps a `TASK_STATE` value to its stable name. Pure so it is unit-testable.
+pub fn task_state_name(state: u32) -> &'static str {
+    match state {
+        TASK_STATE_DISABLED => "disabled",
+        TASK_STATE_QUEUED => "queued",
+        TASK_STATE_READY => "ready",
+        TASK_STATE_RUNNING => "running",
+        _ => "unknown",
+    }
+}
+
+/// Queries the current state of a scheduled task through the native API.
+pub fn task_status(task_name: &str) -> Result<String, String> {
+    validate_text(task_name, "task_name")?;
+    let connection = connect()?;
+    let folder = root_folder(&connection)?;
+
+    let task_name_wide = wide(task_name);
+    let mut registered: *mut IRegisteredTask = ptr::null_mut();
+    let hr = unsafe { (*folder).GetTask(task_name_wide.as_ptr() as *mut u16, &mut registered) };
+    unsafe { (*folder).Release() };
+    check_hr!(hr, format!("failed to open scheduled task '{}'", task_name));
+
+    let mut state: u32 = TASK_STATE_UNKNOWN;
+    let hr = unsafe { (*registered).get_State(&mut state) };
+    unsafe { (*registered).Release() };
+    check_hr!(hr, format!("failed to query state of '{}'", task_name));
+
+    Ok(task_state_name(state).to_string())
+}
+
 /// Enables or disables a scheduled task.
 pub fn set_enabled(task_name: &str, enabled: bool) -> Result<String, String> {
     validate_text(task_name, "task_name")?;
@@ -562,5 +595,15 @@ mod tests {
             validate_text(argument, "argument").unwrap();
         }
         assert!(validate_text("bad&arg", "argument").is_err());
+    }
+
+    #[test]
+    fn task_state_names_cover_all_known_states() {
+        assert_eq!(task_state_name(TASK_STATE_UNKNOWN), "unknown");
+        assert_eq!(task_state_name(TASK_STATE_DISABLED), "disabled");
+        assert_eq!(task_state_name(TASK_STATE_QUEUED), "queued");
+        assert_eq!(task_state_name(TASK_STATE_READY), "ready");
+        assert_eq!(task_state_name(TASK_STATE_RUNNING), "running");
+        assert_eq!(task_state_name(999), "unknown");
     }
 }

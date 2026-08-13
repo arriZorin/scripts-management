@@ -1,11 +1,14 @@
+#[cfg(not(windows))]
 use std::process::Command;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg(not(windows))]
 pub struct CommandSpec {
     pub program: String,
     pub args: Vec<String>,
 }
 
+#[cfg(not(windows))]
 pub fn execute_command(command: CommandSpec) -> Result<String, String> {
     let output = Command::new(&command.program)
         .args(&command.args)
@@ -38,6 +41,7 @@ pub struct CreateScheduledTask {
     pub schedule: ScheduleSpec,
 }
 
+#[cfg(not(windows))]
 fn validate_text(value: &str, label: &str) -> Result<(), String> {
     if value.is_empty() {
         return Err(format!("{} cannot be empty", label));
@@ -131,6 +135,7 @@ fn schedule_args(schedule: &ScheduleSpec) -> Result<Vec<String>, String> {
     }
 }
 
+#[cfg(not(windows))]
 fn spec(args: Vec<String>) -> CommandSpec {
     CommandSpec {
         program: "schtasks.exe".to_string(),
@@ -164,6 +169,7 @@ pub fn build_create_command(input: CreateScheduledTask) -> Result<CommandSpec, S
     Ok(spec(args))
 }
 
+#[cfg(not(windows))]
 pub fn build_update_command(task_name: &str, args: &[String]) -> Result<CommandSpec, String> {
     validate_text(task_name, "task_name")?;
     for argument in args {
@@ -212,6 +218,7 @@ pub fn build_delete_command(task_name: &str) -> Result<CommandSpec, String> {
     ]))
 }
 
+#[cfg(not(windows))]
 pub fn build_status_command(task_name: &str) -> Result<CommandSpec, String> {
     validate_text(task_name, "task_name")?;
     Ok(spec(vec![

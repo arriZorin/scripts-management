@@ -232,7 +232,30 @@ fn create_scheduled_task(
 }
 
 #[tauri::command]
-fn update_scheduled_task(task_name: String, arguments: Vec<String>) -> Result<String, String> {
+fn update_scheduled_task(
+    task_name: String,
+    interpreter: String,
+    script_path: String,
+    arguments: Vec<String>,
+    working_directory: String,
+    _log_directory: String,
+    schedule: SchedulePayload,
+) -> Result<String, String> {
+    let schedule = schedule_from_payload(schedule)?;
+    #[cfg(windows)]
+    {
+        // Native registration uses TASK_CREATE_OR_UPDATE, so update is an
+        // upsert of the same definition used by create.
+        return windows_scheduler::create_task(&windows_scheduler::CreateTaskSpec {
+            task_name,
+            interpreter,
+            script_path,
+            arguments,
+            working_directory,
+            schedule,
+        });
+    }
+    #[cfg(not(windows))]
     scheduler::execute_command(scheduler::build_update_command(&task_name, &arguments)?)
 }
 
@@ -268,6 +291,11 @@ fn run_scheduled_task(task_name: String) -> Result<String, String> {
 
 #[tauri::command]
 fn get_scheduled_task_status(task_name: String) -> Result<String, String> {
+    #[cfg(windows)]
+    {
+        return windows_scheduler::task_status(&task_name);
+    }
+    #[cfg(not(windows))]
     scheduler::execute_command(scheduler::build_status_command(&task_name)?)
 }
 
