@@ -146,6 +146,9 @@ describe('TaskView', () => {
 
     expect(logger.records[0].source).toBe('task.create')
     expect(logger.records[0].message).toContain('Logged task')
+    expect(logger.records[0].message).toContain('repo=')
+    expect(logger.records[0].message).toContain('sched=')
+    expect(logger.records[0].message).toContain('load=')
     expect(logger.records[0].durationMs).toBeGreaterThanOrEqual(0)
     app.unmount()
   })

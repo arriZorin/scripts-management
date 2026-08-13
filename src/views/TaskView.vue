@@ -103,13 +103,20 @@ async function save() {
     let task: Task
     if (editingId.value) {
       task = await taskRepository.update(editingId.value, form.value)
-      await taskScheduler.update(task, script)
     } else {
       task = await taskRepository.create(form.value)
+    }
+    const afterRepo = performance.now()
+    if (editingId.value) {
+      await taskScheduler.update(task, script)
+    } else {
       await taskScheduler.create(task, script)
     }
+    const afterScheduler = performance.now()
     await load()
-    await props.logger?.record('task.create', `${editingId.value ? 'update' : 'create'} ${task.name}`, 'info', Math.round(performance.now() - started))
+    const afterLoad = performance.now()
+    const step = (name: string, at: number) => `${name}=${Math.round(at - started)}ms`
+    await props.logger?.record('task.create', `${editingId.value ? 'update' : 'create'} ${task.name} (${step('repo', afterRepo)} ${step('sched', afterScheduler)} ${step('load', afterLoad)})`, 'info', Math.round(afterLoad - started))
     closeForm()
   } catch (cause) {
     error.value = errorText(cause, 'Failed to save task.')
