@@ -202,19 +202,33 @@ fn create_scheduled_task(
     script_path: String,
     arguments: Vec<String>,
     working_directory: String,
-    log_directory: String,
+    _log_directory: String,
     schedule: SchedulePayload,
 ) -> Result<String, String> {
-    let command = scheduler::build_create_command(scheduler::CreateScheduledTask {
-        task_name,
-        interpreter,
-        script_path,
-        arguments,
-        working_directory,
-        log_directory,
-        schedule: schedule_from_payload(schedule)?,
-    })?;
-    scheduler::execute_command(command)
+    let schedule = schedule_from_payload(schedule)?;
+    #[cfg(windows)]
+    {
+        return windows_scheduler::create_task(&windows_scheduler::CreateTaskSpec {
+            task_name,
+            interpreter,
+            script_path,
+            arguments,
+            working_directory,
+            schedule,
+        });
+    }
+    #[cfg(not(windows))]
+    scheduler::execute_command(scheduler::build_create_command(
+        scheduler::CreateScheduledTask {
+            task_name,
+            interpreter,
+            script_path,
+            arguments,
+            working_directory,
+            log_directory,
+            schedule,
+        },
+    )?)
 }
 
 #[tauri::command]
@@ -224,6 +238,11 @@ fn update_scheduled_task(task_name: String, arguments: Vec<String>) -> Result<St
 
 #[tauri::command]
 fn delete_scheduled_task(task_name: String) -> Result<String, String> {
+    #[cfg(windows)]
+    {
+        return windows_scheduler::delete_task(&task_name);
+    }
+    #[cfg(not(windows))]
     scheduler::execute_command(scheduler::build_delete_command(&task_name)?)
 }
 
@@ -239,6 +258,11 @@ fn set_scheduled_task_enabled(task_name: String, enabled: bool) -> Result<String
 
 #[tauri::command]
 fn run_scheduled_task(task_name: String) -> Result<String, String> {
+    #[cfg(windows)]
+    {
+        return windows_scheduler::run_task(&task_name);
+    }
+    #[cfg(not(windows))]
     scheduler::execute_command(scheduler::build_run_command(&task_name)?)
 }
 

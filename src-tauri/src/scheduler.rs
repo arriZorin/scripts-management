@@ -27,6 +27,7 @@ pub enum ScheduleSpec {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg(not(windows))]
 pub struct CreateScheduledTask {
     pub task_name: String,
     pub interpreter: String,
@@ -50,6 +51,7 @@ fn validate_text(value: &str, label: &str) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(not(windows))]
 fn validate_absolute_path(path: &str, label: &str) -> Result<(), String> {
     validate_text(path, label)?;
     let bytes = path.as_bytes();
@@ -59,6 +61,7 @@ fn validate_absolute_path(path: &str, label: &str) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(not(windows))]
 fn validate_time(time: &str) -> Result<(), String> {
     let parts: Vec<&str> = time.split(':').collect();
     if parts.len() != 2 {
@@ -76,6 +79,7 @@ fn validate_time(time: &str) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(not(windows))]
 fn schedule_args(schedule: &ScheduleSpec) -> Result<Vec<String>, String> {
     match schedule {
         ScheduleSpec::Once { run_at } => {
@@ -134,6 +138,7 @@ fn spec(args: Vec<String>) -> CommandSpec {
     }
 }
 
+#[cfg(not(windows))]
 pub fn build_create_command(input: CreateScheduledTask) -> Result<CommandSpec, String> {
     validate_text(&input.task_name, "task_name")?;
     validate_absolute_path(&input.interpreter, "interpreter")?;
@@ -173,6 +178,7 @@ pub fn build_update_command(task_name: &str, args: &[String]) -> Result<CommandS
     Ok(spec(command))
 }
 
+#[cfg(not(windows))]
 pub fn build_set_enabled_command(task_name: &str, enabled: bool) -> Result<CommandSpec, String> {
     validate_text(task_name, "task_name")?;
     // /ENABLE and /DISABLE are flags of /Change; standalone
@@ -185,6 +191,7 @@ pub fn build_set_enabled_command(task_name: &str, enabled: bool) -> Result<Comma
     ]))
 }
 
+#[cfg(not(windows))]
 pub fn build_run_command(task_name: &str) -> Result<CommandSpec, String> {
     validate_text(task_name, "task_name")?;
     Ok(spec(vec![
@@ -194,6 +201,7 @@ pub fn build_run_command(task_name: &str) -> Result<CommandSpec, String> {
     ]))
 }
 
+#[cfg(not(windows))]
 pub fn build_delete_command(task_name: &str) -> Result<CommandSpec, String> {
     validate_text(task_name, "task_name")?;
     Ok(spec(vec![
@@ -216,6 +224,7 @@ pub fn build_status_command(task_name: &str) -> Result<CommandSpec, String> {
 }
 
 #[cfg(test)]
+#[cfg(not(windows))]
 mod tests {
     use super::*;
 
