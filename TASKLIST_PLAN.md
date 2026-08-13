@@ -145,23 +145,29 @@ Implementation notes:
 - Once schedules reject invalid or past datetimes.
 - Interval schedules support positive minute/hour intervals.
 
-## Phase 3 — Task UI
+## Phase 3 — Task UI ✅
 
-- [ ] Replace placeholder `TaskView`
-- [ ] Add task list table
-- [ ] Add empty state
-- [ ] Add task status badges
-- [ ] Add New Task button
-- [ ] Add create/edit modal
-- [ ] Add script selector from Scripts List
-- [ ] Add interpreter field
-- [ ] Add arguments field
-- [ ] Add schedule form
-- [ ] Add enable/disable toggle
-- [ ] Add delete confirmation
-- [ ] Add focused Vue tests
+- [x] Replace placeholder `TaskView`
+- [x] Add task list table
+- [x] Add empty state
+- [x] Add task status badges
+- [x] Add New Task button
+- [x] Add create/edit modal
+- [x] Add script selector from Scripts List
+- [x] Add interpreter field
+- [x] Add arguments field
+- [x] Add schedule form
+- [x] Add enable/disable toggle
+- [x] Add delete confirmation
+- [x] Add focused Vue tests
 
-**Acceptance:** User can create and edit a task from the Task page.
+**Acceptance:** User can create and edit a task from the Task page. ✅
+
+Implementation notes:
+
+- Task UI uses injected `TaskRepository` and script list props.
+- App-level rendering remains safe when repository props are not configured.
+- Tauri/Windows execution is intentionally deferred to Phase 4.
 
 ## Phase 4 — Windows Task Scheduler Adapter
 
