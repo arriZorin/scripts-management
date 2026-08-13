@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { createApp, nextTick } from 'vue'
 import ScriptsListView from './ScriptsListView.vue'
 
@@ -126,7 +126,7 @@ describe('ScriptsListView', () => {
 
     const rows = Array.from(container.querySelectorAll('tbody tr'))
     const listItems = rows.map((row) => row.textContent)
-    expect(listItems).toEqual(['backup.pyC:/scripts/backup.py2024-01-01T00:00:00.000Z'])
+    expect(listItems).toEqual(['backup.pyC:/scripts/backup.py2024-01-01T00:00:00.000Z✏️🗑️'])
     expect(container.querySelector('.region.body')?.textContent).toContain('Added 0 script(s), skipped 1.')
 
     app.unmount()
@@ -243,6 +243,48 @@ describe('ScriptsListView', () => {
     expect(rows[0].textContent).toContain('late.py')
     expect(rows[0].textContent).toContain('C:/scripts/late.py')
 
+    app.unmount()
+  })
+
+  it('renders edit and delete actions and edits a script', async () => {
+    const repo = new FakeScriptRepository([{
+      id: 'edit-1', name: 'old.py', path: 'C:/old.py', type: 'python',
+      description: 'old description', createdAt: '2024-01-01T00:00:00.000Z', updatedAt: '2024-01-01T00:00:00.000Z',
+    }])
+    const { container, app } = mountView(repo, new FakeScriptPicker(), new FakeFileScanner())
+    await flush()
+
+    expect(container.querySelector('[data-testid="edit-script-edit-1"]')).toBeTruthy()
+    expect(container.querySelector('[data-testid="delete-script-edit-1"]')).toBeTruthy()
+    ;(container.querySelector('[data-testid="edit-script-edit-1"]') as HTMLElement).click()
+    await nextTick()
+    const nameInput = container.querySelector('[data-testid="edit-name-input"]') as HTMLInputElement
+    nameInput.value = 'new.py'
+    nameInput.dispatchEvent(new Event('input', { bubbles: true }))
+    ;(container.querySelector('[data-testid="save-edit-btn"]') as HTMLElement).click()
+    await flush()
+    expect(repo.items[0].name).toBe('new.py')
+    expect(container.querySelector('[data-testid="edit-dialog"]')).toBeNull()
+    app.unmount()
+  })
+
+  it('deletes a script only after confirmation', async () => {
+    const repo = new FakeScriptRepository([{
+      id: 'delete-1', name: 'remove.py', path: 'C:/remove.py', type: 'python',
+      createdAt: '2024-01-01T00:00:00.000Z', updatedAt: '2024-01-01T00:00:00.000Z',
+    }])
+    const { container, app } = mountView(repo, new FakeScriptPicker(), new FakeFileScanner())
+    await flush()
+    window.confirm = vi.fn().mockReturnValue(false)
+    const confirm = window.confirm as ReturnType<typeof vi.fn>
+    ;(container.querySelector('[data-testid="delete-script-delete-1"]') as HTMLElement).click()
+    await flush()
+    expect(repo.items).toHaveLength(1)
+    confirm.mockReturnValue(true)
+    ;(container.querySelector('[data-testid="delete-script-delete-1"]') as HTMLElement).click()
+    await flush()
+    expect(repo.items).toHaveLength(0)
+    confirm.mockRestore()
     app.unmount()
   })
 })

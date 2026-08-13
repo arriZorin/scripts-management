@@ -24,6 +24,7 @@
             <th>Path</th>
             <th>Type</th>
             <th>Created</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -32,9 +33,43 @@
             <td>{{ s.path }}</td>
             <td><span class="badge badge-info">{{ s.type }}</span></td>
             <td>{{ s.createdAt }}</td>
+            <td>
+              <div class="join">
+                <button @click="openEditDialog(s)" :data-testid="`edit-script-${s.id}`" class="btn btn-xs btn-neutral join-item" :title="`Edit ${s.name}`">✏️</button>
+                <button @click="handleDelete(s)" :data-testid="`delete-script-${s.id}`" class="btn btn-xs btn-neutral join-item" :title="`Delete ${s.name}`">🗑️</button>
+              </div>
+            </td>
           </tr>
         </tbody>
       </table>
+
+      <!-- Edit Dialog -->
+      <div v-if="isEditing" role="dialog" data-testid="edit-dialog" class="modal-box p-4 max-w-md">
+        <h3 class="text-lg font-bold mb-4">Edit Script</h3>
+        <div class="form-control w-full mb-4">
+          <label class="label">
+            <span class="label-text">Name</span>
+            <input v-model="editName" type="text" data-testid="edit-name-input" class="input input-bordered w-full" placeholder="Script name" />
+          </label>
+        </div>
+        <div class="form-control w-full mb-4">
+          <label class="label">
+            <span class="label-text">Description</span>
+            <textarea v-model="editDescription" data-testid="edit-description-input" class="textarea textarea-bordered h-20" placeholder="Script description" />
+          </label>
+        </div>
+        <p v-if="editError" class="alert alert-error mb-4">{{ editError }}</p>
+        <div class="flex justify-between items-center">
+          <div class="text-sm text-gray-600">
+            <div class="mb-1">Path: <span class="script-name">{{ selectedScript?.path }}</span></div>
+            <div>Type: <span class="script-name">{{ selectedScript?.type }}</span></div>
+          </div>
+          <div class="flex gap-2">
+            <button @click="saveEdit" data-testid="save-edit-btn" class="btn btn-primary btn-sm">Save</button>
+            <button @click="closeEditDialog" data-testid="cancel-edit-btn" class="btn btn-ghost btn-sm">Cancel</button>
+          </div>
+        </div>
+      </div>
       <div class="card-body">
         <p v-if="scripts.length === 0" class="alert alert-info text-gray-600">No scripts yet. Add a .py file or folder.</p>
       </div>
@@ -55,6 +90,7 @@ import { TauriFileStorage } from '../services/TauriFileStorage';
 import { TauriScriptPicker } from '../services/scriptImport/ScriptPicker';
 import { TauriFileScanner } from '../services/scriptImport/FileScanner';
 import { onMounted } from 'vue';
+import type { Script } from '../models/Script';
 
 interface Props {
   repository?: import('../services/ScriptRepository').ScriptRepository;
@@ -71,9 +107,75 @@ const scanner = props.scanner ?? new TauriFileScanner();
 const { scripts, error, busy, addScriptFile, addScriptFolder, load } = useScripts({ repository, picker, scanner });
 
 const lastResult = ref<{ added: number; skipped: number } | null>(null);
+const operationSummary = ref('');
 const summary = computed(() =>
-  lastResult.value ? `Added ${lastResult.value.added} script(s), skipped ${lastResult.value.skipped}.` : ''
+  operationSummary.value || (lastResult.value ? `Added ${lastResult.value.added} script(s), skipped ${lastResult.value.skipped}.` : '')
 );
+
+// Edit/Delete state and refs
+const selectedScript = ref<Script | null>(null);
+const editName = ref('');
+const editDescription = ref('');
+const isEditing = ref(false);
+const editError = ref<string | null>(null);
+
+// Edit dialog handlers
+function openEditDialog(script: Script) {
+  selectedScript.value = script;
+  editName.value = script.name;
+  editDescription.value = script.description ?? '';
+  editError.value = null;
+  operationSummary.value = '';
+  isEditing.value = true;
+}
+
+function closeEditDialog() {
+  isEditing.value = false;
+  selectedScript.value = null;
+  editError.value = null;
+}
+
+async function saveEdit() {
+  if (!selectedScript.value) return;
+
+  editError.value = null;
+
+  // Trim name and reject empty
+  const trimmedName = editName.value.trim();
+  if (!trimmedName) {
+    editError.value = 'Script name cannot be empty.';
+    return;
+  }
+
+  try {
+    await repository.update(selectedScript.value.id, {
+      name: trimmedName,
+      description: editDescription.value.trim(),
+    });
+    await load();
+    closeEditDialog();
+    operationSummary.value = `Updated ${trimmedName}.`;
+  } catch (e) {
+    editError.value = e instanceof Error ? e.message : 'Failed to update script.';
+  }
+}
+
+async function handleDelete(script: Script) {
+  if (!script) return;
+
+  // Check user confirmation BEFORE deleting
+  const confirmed = window.confirm(`Are you sure you want to delete "${script.name}"? This action cannot be undone.`);
+  if (!confirmed) return;
+
+  try {
+    await repository.delete(script.id);
+    await load();
+
+    operationSummary.value = `Deleted ${script.name}.`;
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Failed to delete script.';
+  }
+}
 
 async function handleAddFile() {
   lastResult.value = await addScriptFile();
