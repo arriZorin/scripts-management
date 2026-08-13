@@ -7,12 +7,37 @@ import type { Task, TaskInput } from '../models/Task'
 class FakeTaskExecutor {
   calls: string[] = []
   result = 'Task started'
-  error: Error | null = null
+  error: unknown = null
 
   async run(task: Task) {
     this.calls.push(task.id)
     if (this.error) throw this.error
     return this.result
+  }
+}
+
+class FakeTaskScheduler {
+  creates: Task[] = []
+  updates: Task[] = []
+  deletes: string[] = []
+  enabledCalls: { id: string; enabled: boolean }[] = []
+  error: unknown = null
+
+  async create(task: Task) {
+    if (this.error) throw this.error
+    this.creates.push(task)
+  }
+  async update(task: Task) {
+    if (this.error) throw this.error
+    this.updates.push(task)
+  }
+  async delete(taskId: string) {
+    if (this.error) throw this.error
+    this.deletes.push(taskId)
+  }
+  async setEnabled(taskId: string, enabled: boolean) {
+    if (this.error) throw this.error
+    this.enabledCalls.push({ id: taskId, enabled })
   }
 }
 
@@ -44,18 +69,19 @@ class FakeTaskRepository {
   async delete(id: string) { this.items = this.items.filter(task => task.id !== id) }
 }
 
-function mountView(repository: FakeTaskRepository, executor = new FakeTaskExecutor()) {
+function mountView(repository: FakeTaskRepository, executor = new FakeTaskExecutor(), scheduler = new FakeTaskScheduler()) {
   const container = document.createElement('div')
   document.body.appendChild(container)
-  const app = createApp(TaskView, { taskRepository: repository, taskExecutor: executor, scripts: [script] })
+  const app = createApp(TaskView, { taskRepository: repository, taskExecutor: executor, taskScheduler: scheduler, scripts: [script] })
   app.mount(container)
   return { container, app }
 }
 
 async function flush() {
-  await nextTick()
-  await Promise.resolve()
-  await nextTick()
+  for (let i = 0; i < 5; i++) {
+    await nextTick()
+    await Promise.resolve()
+  }
 }
 
 describe('TaskView', () => {
@@ -136,5 +162,91 @@ it('runs a task now and shows the executor result', async () => {
 
   expect(executor.calls).toEqual(['task-1'])
   expect(container.querySelector('[data-testid="task-operation-result"]')?.textContent).toContain('Task started')
+  app.unmount()
+})
+
+it('shows the real string error when running a task fails', async () => {
+  const repository = new FakeTaskRepository()
+  await repository.create({ name: 'Run me', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', time: '08:00' }, enabled: true })
+  const executor = new FakeTaskExecutor()
+  executor.error = 'ERROR: The system cannot find the file specified.'
+  const { container, app } = mountView(repository, executor)
+  await flush()
+
+  ;(container.querySelector('[data-testid="run-task-task-1"]') as HTMLElement).click()
+  await flush()
+
+  expect(container.querySelector('[data-testid="task-operation-error"]')?.textContent).toContain('The system cannot find the file specified')
+  app.unmount()
+})
+
+it('registers a new task with the scheduler after saving', async () => {
+  const repository = new FakeTaskRepository()
+  const scheduler = new FakeTaskScheduler()
+  const { container, app } = mountView(repository, new FakeTaskExecutor(), scheduler)
+  await flush()
+  ;(container.querySelector('[data-testid="new-task-btn"]') as HTMLElement).click()
+  await nextTick()
+
+  const name = container.querySelector('[data-testid="task-name-input"]') as HTMLInputElement
+  name.value = 'Daily backup'
+  name.dispatchEvent(new Event('input', { bubbles: true }))
+  ;(container.querySelector('[data-testid="save-task-btn"]') as HTMLElement).click()
+  await flush()
+
+  expect(scheduler.creates).toHaveLength(1)
+  expect(scheduler.creates[0].id).toBe('task-1')
+  expect(scheduler.creates[0].scriptId).toBe('script-1')
+  app.unmount()
+})
+
+it('resyncs the scheduler when editing a task', async () => {
+  const repository = new FakeTaskRepository()
+  await repository.create({ name: 'Existing', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', time: '08:00' }, enabled: true })
+  const scheduler = new FakeTaskScheduler()
+  const { container, app } = mountView(repository, new FakeTaskExecutor(), scheduler)
+  await flush()
+
+  ;(container.querySelector('[data-testid="edit-task-task-1"]') as HTMLElement).click()
+  await nextTick()
+  const name = container.querySelector('[data-testid="task-name-input"]') as HTMLInputElement
+  name.value = 'Updated'
+  name.dispatchEvent(new Event('input', { bubbles: true }))
+  ;(container.querySelector('[data-testid="save-task-btn"]') as HTMLElement).click()
+  await flush()
+
+  expect(scheduler.updates).toHaveLength(1)
+  expect(scheduler.updates[0].id).toBe('task-1')
+  expect(scheduler.updates[0].name).toBe('Updated')
+  app.unmount()
+})
+
+it('syncs enable state changes to the scheduler', async () => {
+  const repository = new FakeTaskRepository()
+  await repository.create({ name: 'Existing', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', time: '08:00' }, enabled: true })
+  const scheduler = new FakeTaskScheduler()
+  const { container, app } = mountView(repository, new FakeTaskExecutor(), scheduler)
+  await flush()
+
+  ;(container.querySelector('[data-testid="toggle-task-task-1"]') as HTMLElement).click()
+  await flush()
+
+  expect(scheduler.enabledCalls).toEqual([{ id: 'task-1', enabled: false }])
+  app.unmount()
+})
+
+it('removes the scheduled task when deleting a task', async () => {
+  const repository = new FakeTaskRepository()
+  await repository.create({ name: 'Existing', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', time: '08:00' }, enabled: true })
+  const scheduler = new FakeTaskScheduler()
+  const { container, app } = mountView(repository, new FakeTaskExecutor(), scheduler)
+  await flush()
+
+  ;(container.querySelector('[data-testid="delete-task-task-1"]') as HTMLElement).click()
+  await nextTick()
+  ;(container.querySelector('[data-testid="confirm-task-delete-btn"]') as HTMLElement).click()
+  await flush()
+
+  expect(scheduler.deletes).toEqual(['task-1'])
   app.unmount()
 })

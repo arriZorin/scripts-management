@@ -5,10 +5,13 @@ import type { Schedule, Task, TaskInput } from '../models/Task'
 import type { TaskRepository } from '../services/TaskRepository'
 import { TauriTaskExecutor } from '../services/TaskExecutor'
 import type { TaskExecutor } from '../services/TaskExecutor'
+import { TauriTaskScheduler } from '../services/TaskScheduler'
+import type { TaskScheduler } from '../services/TaskScheduler'
 
 interface Props {
   taskRepository?: TaskRepository
   taskExecutor?: TaskExecutor
+  taskScheduler?: TaskScheduler
   scripts?: Script[]
 }
 
@@ -22,6 +25,7 @@ const taskRepository: TaskRepository = props.taskRepository ?? {
   delete: async () => undefined,
 }
 const taskExecutor = props.taskExecutor ?? new TauriTaskExecutor()
+const taskScheduler: TaskScheduler = props.taskScheduler ?? new TauriTaskScheduler()
 const tasks = ref<Task[]>([])
 const isEditing = ref(false)
 const editingId = ref<string | null>(null)
@@ -91,18 +95,32 @@ async function save() {
     if (!form.value.name.trim()) throw new Error('Task name is required')
     if (!form.value.scriptId) throw new Error('Script is required')
     if (!form.value.interpreter.trim()) throw new Error('Python interpreter is required')
-    if (editingId.value) await taskRepository.update(editingId.value, form.value)
-    else await taskRepository.create(form.value)
+    const script = scripts.find(script => script.id === form.value.scriptId)
+    if (!script) throw new Error('Script is required')
+    let task: Task
+    if (editingId.value) {
+      task = await taskRepository.update(editingId.value, form.value)
+      await taskScheduler.update(task, script)
+    } else {
+      task = await taskRepository.create(form.value)
+      await taskScheduler.create(task, script)
+    }
     await load()
     closeForm()
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : 'Failed to save task.'
+    error.value = errorText(cause, 'Failed to save task.')
   }
 }
 
 async function toggle(task: Task) {
-  await taskRepository.update(task.id, { enabled: !task.enabled })
-  await load()
+  operationError.value = ''
+  try {
+    const updated = await taskRepository.update(task.id, { enabled: !task.enabled })
+    await taskScheduler.setEnabled(updated.id, updated.enabled)
+    await load()
+  } catch (cause) {
+    operationError.value = errorText(cause, 'Failed to update task.')
+  }
 }
 
 async function runTask(task: Task) {
@@ -113,7 +131,7 @@ async function runTask(task: Task) {
     operationResult.value = await taskExecutor.run(task)
     await load()
   } catch (cause) {
-    operationError.value = cause instanceof Error ? cause.message : 'Failed to run task.'
+    operationError.value = errorText(cause, 'Failed to run task.')
   } finally {
     runningTaskId.value = null
   }
@@ -129,9 +147,22 @@ function cancelDelete() {
 
 async function confirmDelete() {
   if (!deleteTarget.value) return
-  await taskRepository.delete(deleteTarget.value.id)
-  deleteTarget.value = null
-  await load()
+  operationError.value = ''
+  try {
+    const target = deleteTarget.value
+    await taskRepository.delete(target.id)
+    await taskScheduler.delete(target.id)
+    deleteTarget.value = null
+    await load()
+  } catch (cause) {
+    operationError.value = errorText(cause, 'Failed to delete task.')
+  }
+}
+
+function errorText(cause: unknown, fallback: string): string {
+  if (cause instanceof Error) return cause.message
+  if (typeof cause === 'string' && cause.trim()) return cause
+  return fallback
 }
 
 function scheduleLabel(schedule: Schedule): string {
