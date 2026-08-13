@@ -44,7 +44,11 @@ function emptyForm(): TaskInput {
 }
 
 async function load() {
-  tasks.value = await taskRepository.list()
+  try {
+    tasks.value = await taskRepository.list()
+  } catch {
+    tasks.value = []
+  }
 }
 
 function openCreate() {

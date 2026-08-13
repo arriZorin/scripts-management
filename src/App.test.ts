@@ -236,4 +236,56 @@ describe('App', () => {
     app.unmount();
     document.body.removeChild(container);
   });
+
+  it('Task dialog script dropdown lists scripts loaded from the script repository', async () => {
+    const seedScript = {
+      id: 'script-1',
+      name: 'backup.py',
+      path: 'C:/scripts/backup.py',
+      type: 'python',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    };
+    const fakeScriptRepository = {
+      list: async () => [seedScript],
+      get: async (id: string) => (id === seedScript.id ? seedScript : null),
+      create: async () => seedScript,
+      update: async () => seedScript,
+      delete: async () => undefined,
+    };
+    const fakeTaskRepository = {
+      list: async () => [],
+      get: async () => null,
+      create: async (input: any) => ({ ...input, id: 't1', lastRunAt: null, nextRunAt: null, status: 'scheduled', createdAt: '', updatedAt: '' }),
+      update: async () => { throw new Error('unused'); },
+      delete: async () => undefined,
+    };
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+
+    const app = createApp(App, { scriptRepository: fakeScriptRepository, taskRepository: fakeTaskRepository });
+    app.mount(container);
+    await nextTick();
+    await Promise.resolve();
+    await nextTick();
+
+    for (const btn of Array.from(container.querySelectorAll('button'))) {
+      if (btn.textContent?.trim() === 'Task') {
+        (btn as HTMLElement).click();
+        await nextTick();
+        break;
+      }
+    }
+
+    const newTaskBtn = container.querySelector('[data-testid="new-task-btn"]') as HTMLElement;
+    newTaskBtn.click();
+    await nextTick();
+
+    const options = Array.from(container.querySelectorAll('[data-testid="script-select"] option'));
+    expect(options.map(option => option.textContent?.trim())).toContain('backup.py');
+
+    app.unmount();
+    document.body.removeChild(container);
+  });
 });

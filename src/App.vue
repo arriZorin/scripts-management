@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useNavigation } from './composables/useNavigation';
 import HomeView from './views/HomeView.vue';
 import ScriptsListView from './views/ScriptsListView.vue';
@@ -10,8 +10,34 @@ import ScriptsListIcon from './components/icons/ScriptsListIcon.vue';
 import TaskIcon from './components/icons/TaskIcon.vue';
 import SettingIcon from './components/icons/SettingIcon.vue';
 import type { Component } from 'vue';
+import type { Script } from './models/Script';
+import { TauriFileStorage } from './services/TauriFileStorage';
+import { JsonScriptRepository } from './services/JsonScriptRepository';
+import { JsonTaskRepository } from './services/JsonTaskRepository';
+import type { ScriptRepository } from './services/ScriptRepository';
+import type { TaskRepository } from './services/TaskRepository';
+
+interface Props {
+  scriptRepository?: ScriptRepository;
+  taskRepository?: TaskRepository;
+}
+
+const props = defineProps<Props>();
 
 const { navItems, activeView, setView } = useNavigation();
+
+const scriptRepository = props.scriptRepository ?? new JsonScriptRepository(new TauriFileStorage(), 'scripts.json');
+const taskRepository = props.taskRepository ?? new JsonTaskRepository(new TauriFileStorage(), 'tasks.json', scriptRepository);
+
+const scripts = ref<Script[]>([]);
+
+async function loadScripts() {
+  try {
+    scripts.value = await scriptRepository.list();
+  } catch {
+    scripts.value = [];
+  }
+}
 
 const views = computed(() => {
   switch (activeView.value) {
@@ -34,6 +60,8 @@ const viewIcons: Record<string, Component> = {
   task: TaskIcon,
   setting: SettingIcon,
 };
+
+onMounted(loadScripts);
 </script>
 
 <template>
@@ -58,7 +86,7 @@ const viewIcons: Record<string, Component> = {
       </ul>
     </nav>
     <main class="main-content flex-1 p-4 overflow-y-auto">
-      <component :is="views" />
+      <component :is="views" :task-repository="taskRepository" :scripts="scripts" />
     </main>
   </div>
 </template>
