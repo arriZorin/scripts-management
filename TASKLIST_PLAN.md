@@ -123,20 +123,27 @@ Implementation notes:
 - Enabled tasks use status `scheduled`; disabled tasks use status `disabled`.
 - Schedule next-run calculation and Windows integration remain in later phases.
 
-## Phase 2 — Schedule Calculation
+## Phase 2 — Schedule Calculation ✅
 
-- [ ] Add pure schedule types
-- [ ] Implement `calculateNextRun()`
-- [ ] Support:
+- [x] Add pure schedule types
+- [x] Implement `calculateNextRun()`
+- [x] Support:
   - Once
   - Daily
   - Weekly
   - Interval
-- [ ] Handle local Windows timezone
-- [ ] Validate past/invalid dates
-- [ ] Add deterministic tests with fixed dates
+- [x] Handle local Windows timezone
+- [x] Validate past/invalid dates
+- [x] Add deterministic tests with fixed dates
 
-**Acceptance:** Next-run calculation is fully tested independently from Tauri and Windows.
+**Acceptance:** Next-run calculation is fully tested independently from Tauri and Windows. ✅
+
+Implementation notes:
+
+- `calculateNextRun(schedule, from)` is pure and accepts an explicit reference date.
+- Daily and weekly schedules use local `Date` operations.
+- Once schedules reject invalid or past datetimes.
+- Interval schedules support positive minute/hour intervals.
 
 ## Phase 3 — Task UI
 
