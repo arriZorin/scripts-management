@@ -45,32 +45,37 @@
 
 
       <!-- Edit Dialog -->
-      <div v-if="isEditing" role="dialog" data-testid="edit-dialog" class="modal-box p-4 max-w-md">
-        <h3 class="text-lg font-bold mb-4">Edit Script</h3>
-        <div class="form-control w-full mb-4">
-          <label class="label">
-            <span class="label-text">Name</span>
-            <input v-model="editName" type="text" data-testid="edit-name-input" class="input input-bordered w-full" placeholder="Script name" />
-          </label>
-        </div>
-        <div class="form-control w-full mb-4">
-          <label class="label">
-            <span class="label-text">Description</span>
-            <textarea v-model="editDescription" data-testid="edit-description-input" class="textarea textarea-bordered h-20" placeholder="Script description" />
-          </label>
-        </div>
-        <p v-if="editError" class="alert alert-error mb-4">{{ editError }}</p>
-        <div class="flex justify-between items-center">
-          <div class="text-sm text-gray-600">
-            <div class="mb-1">Path: <span class="script-name">{{ selectedScript?.path }}</span></div>
-            <div>Type: <span class="script-name">{{ selectedScript?.type }}</span></div>
+      <dialog id="edit-dialog" v-if="isEditing" data-testid="edit-dialog" class="modal modal-open" role="dialog">
+        <div class="modal-box p-4 max-w-md">
+          <h3 class="text-lg font-bold mb-4">Edit Script</h3>
+          <div class="form-control w-full mb-4">
+            <label class="label">
+              <span class="label-text">Name</span>
+              <input v-model="editName" type="text" data-testid="edit-name-input" class="input input-bordered w-full" placeholder="Script name" />
+            </label>
           </div>
-          <div class="flex gap-2">
-            <button @click="saveEdit" data-testid="save-edit-btn" class="btn btn-primary btn-sm">Save</button>
-            <button @click="closeEditDialog" data-testid="cancel-edit-btn" class="btn btn-ghost btn-sm">Cancel</button>
+          <div class="form-control w-full mb-4">
+            <label class="label">
+              <span class="label-text">Description</span>
+              <textarea v-model="editDescription" data-testid="edit-description-input" class="textarea textarea-bordered h-20" placeholder="Script description" />
+            </label>
+          </div>
+          <p v-if="editError" class="alert alert-error mb-4">{{ editError }}</p>
+          <div class="flex justify-between items-center">
+            <div class="text-sm text-gray-600">
+              <div class="mb-1">Path: <span class="script-name">{{ selectedScript?.path }}</span></div>
+              <div>Type: <span class="script-name">{{ selectedScript?.type }}</span></div>
+            </div>
+            <div class="flex gap-2">
+              <button @click="saveEdit" data-testid="save-edit-btn" class="btn btn-primary btn-sm">Save</button>
+              <button @click="closeEditDialog" data-testid="cancel-edit-btn" class="btn btn-ghost btn-sm">Cancel</button>
+            </div>
           </div>
         </div>
-      </div>
+        <form method="dialog" class="modal-backdrop">
+          <button @click.prevent="closeEditDialog">close</button>
+        </form>
+      </dialog>
 
       <!-- Delete Confirmation Modal -->
       <dialog id="delete-dialog" v-if="deleteTarget" data-testid="delete-dialog" class="modal modal-open" role="dialog">

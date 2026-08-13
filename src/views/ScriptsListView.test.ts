@@ -259,6 +259,10 @@ describe('ScriptsListView', () => {
     expect(container.querySelector('[data-testid="delete-script-edit-1"]')).toBeTruthy()
     ;(container.querySelector('[data-testid="edit-script-edit-1"]') as HTMLElement).click()
     await nextTick()
+    const editDialog = container.querySelector('[data-testid="edit-dialog"]')
+    expect(editDialog).toBeTruthy()
+    expect(editDialog?.classList.contains('modal')).toBe(true)
+    expect(editDialog?.classList.contains('modal-open')).toBe(true)
     const nameInput = container.querySelector('[data-testid="edit-name-input"]') as HTMLInputElement
     nameInput.value = 'new.py'
     nameInput.dispatchEvent(new Event('input', { bubbles: true }))
