@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 use tauri::Manager;
 
 mod scheduler;
+#[cfg(windows)]
+mod windows_scheduler;
 
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -227,6 +229,11 @@ fn delete_scheduled_task(task_name: String) -> Result<String, String> {
 
 #[tauri::command]
 fn set_scheduled_task_enabled(task_name: String, enabled: bool) -> Result<String, String> {
+    #[cfg(windows)]
+    {
+        return windows_scheduler::set_enabled(&task_name, enabled);
+    }
+    #[cfg(not(windows))]
     scheduler::execute_command(scheduler::build_set_enabled_command(&task_name, enabled)?)
 }
 
