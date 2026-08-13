@@ -169,27 +169,34 @@ Implementation notes:
 - App-level rendering remains safe when repository props are not configured.
 - Tauri/Windows execution is intentionally deferred to Phase 4.
 
-## Phase 4 — Windows Task Scheduler Adapter
+## Phase 4 — Windows Task Scheduler Adapter ✅
 
-- [ ] Define Tauri commands:
+- [x] Define Tauri commands:
   - `create_scheduled_task`
   - `update_scheduled_task`
   - `delete_scheduled_task`
   - `set_scheduled_task_enabled`
   - `run_scheduled_task`
   - `get_scheduled_task_status`
-- [ ] Implement Rust Windows adapter
-- [ ] Generate safe command arguments
-- [ ] Use absolute paths for:
+- [x] Implement Rust Windows adapter
+- [x] Generate safe command arguments
+- [x] Use absolute paths for:
   - Python executable
   - Script file
   - Working directory
   - Log directory
-- [ ] Prevent shell injection in script arguments
-- [ ] Return structured errors to frontend
-- [ ] Add Rust unit tests for command construction
+- [x] Prevent shell injection in script arguments
+- [x] Return structured errors to frontend
+- [x] Add Rust unit tests for command construction
 
-**Acceptance:** Creating a task in the UI creates a real Windows Scheduled Task.
+**Acceptance:** Creating a task in the UI creates a real Windows Scheduled Task. ✅
+
+Implementation notes:
+
+- Uses the Windows-native `schtasks.exe` command without an extra Rust dependency.
+- Command construction is separated from process execution for unit testing.
+- Tauri commands return `Result<String, String>` with process stderr on failure.
+- Python executable, script, working-directory, and log-directory inputs require absolute Windows paths.
 
 ## Phase 5 — Run Now
 

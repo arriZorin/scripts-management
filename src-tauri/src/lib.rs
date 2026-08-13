@@ -1,7 +1,10 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+use serde::Deserialize;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::Manager;
+
+mod scheduler;
 
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -76,12 +79,19 @@ fn read_app_file(root: &std::path::Path, rel: &str) -> Result<Option<String>, St
 }
 
 #[tauri::command]
-fn read_text_file(state: tauri::State<'_, AppDataDir>, path: String) -> Result<Option<String>, String> {
+fn read_text_file(
+    state: tauri::State<'_, AppDataDir>,
+    path: String,
+) -> Result<Option<String>, String> {
     read_app_file(&state.0, &path)
 }
 
 #[tauri::command]
-fn write_text_file(state: tauri::State<'_, AppDataDir>, path: String, content: String) -> Result<(), String> {
+fn write_text_file(
+    state: tauri::State<'_, AppDataDir>,
+    path: String,
+    content: String,
+) -> Result<(), String> {
     if path.is_empty() {
         return Err("path cannot be empty".to_string());
     }
@@ -98,8 +108,83 @@ fn write_text_file(state: tauri::State<'_, AppDataDir>, path: String, content: S
             return Err(format!("failed to create directory: {}", e));
         }
     }
-    fs::write(&full_path, &content)
-        .map_err(|e| format!("failed to write file: {}", e))
+    fs::write(&full_path, &content).map_err(|e| format!("failed to write file: {}", e))
+}
+
+#[derive(Deserialize)]
+struct SchedulePayload {
+    schedule_type: String,
+    value: String,
+    day_of_week: Option<u8>,
+    every: Option<u32>,
+    unit: Option<String>,
+}
+
+fn schedule_from_payload(payload: SchedulePayload) -> Result<scheduler::ScheduleSpec, String> {
+    match payload.schedule_type.as_str() {
+        "once" => Ok(scheduler::ScheduleSpec::Once {
+            run_at: payload.value,
+        }),
+        "daily" => Ok(scheduler::ScheduleSpec::Daily {
+            time: payload.value,
+        }),
+        "weekly" => Ok(scheduler::ScheduleSpec::Weekly {
+            day_of_week: payload.day_of_week.ok_or("day_of_week is required")?,
+            time: payload.value,
+        }),
+        "interval" => Ok(scheduler::ScheduleSpec::Interval {
+            every: payload.every.ok_or("every is required")?,
+            unit: payload.unit.ok_or("unit is required")?,
+        }),
+        _ => Err("unsupported schedule type".to_string()),
+    }
+}
+
+#[tauri::command]
+fn create_scheduled_task(
+    task_name: String,
+    interpreter: String,
+    script_path: String,
+    arguments: Vec<String>,
+    working_directory: String,
+    log_directory: String,
+    schedule: SchedulePayload,
+) -> Result<String, String> {
+    let command = scheduler::build_create_command(scheduler::CreateScheduledTask {
+        task_name,
+        interpreter,
+        script_path,
+        arguments,
+        working_directory,
+        log_directory,
+        schedule: schedule_from_payload(schedule)?,
+    })?;
+    scheduler::execute_command(command)
+}
+
+#[tauri::command]
+fn update_scheduled_task(task_name: String, arguments: Vec<String>) -> Result<String, String> {
+    scheduler::execute_command(scheduler::build_update_command(&task_name, &arguments)?)
+}
+
+#[tauri::command]
+fn delete_scheduled_task(task_name: String) -> Result<String, String> {
+    scheduler::execute_command(scheduler::build_delete_command(&task_name)?)
+}
+
+#[tauri::command]
+fn set_scheduled_task_enabled(task_name: String, enabled: bool) -> Result<String, String> {
+    scheduler::execute_command(scheduler::build_set_enabled_command(&task_name, enabled)?)
+}
+
+#[tauri::command]
+fn run_scheduled_task(task_name: String) -> Result<String, String> {
+    scheduler::execute_command(scheduler::build_run_command(&task_name)?)
+}
+
+#[tauri::command]
+fn get_scheduled_task_status(task_name: String) -> Result<String, String> {
+    scheduler::execute_command(scheduler::build_status_command(&task_name)?)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -107,7 +192,18 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![greet, scan_files, read_text_file, write_text_file])
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            scan_files,
+            read_text_file,
+            write_text_file,
+            create_scheduled_task,
+            update_scheduled_task,
+            delete_scheduled_task,
+            set_scheduled_task_enabled,
+            run_scheduled_task,
+            get_scheduled_task_status
+        ])
         .setup(|app| {
             let dir = app.path().app_local_data_dir()?;
             std::fs::create_dir_all(&dir)?;
@@ -128,7 +224,11 @@ mod tests {
     // (cargo runs tests in parallel threads; a shared dir lets one test's
     // remove_dir_all race another test's file writes, so each test gets its own dir)
     fn create_temp_dir(label: &str) -> PathBuf {
-        let dir = env::temp_dir().join(format!("read_app_file_test_{}_{}", std::process::id(), label));
+        let dir = env::temp_dir().join(format!(
+            "read_app_file_test_{}_{}",
+            std::process::id(),
+            label
+        ));
         fs::create_dir_all(&dir).unwrap();
         dir
     }
