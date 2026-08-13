@@ -39,6 +39,28 @@ fn log_dir(root: &Path) -> Result<PathBuf, String> {
     Ok(dir)
 }
 
+/// Searches PATH-style entries for `<name>.exe` without spawning any process.
+/// Spawning console tools (e.g. `where.exe`) from the Tauri GUI process incurs
+/// seconds of console-host latency in release builds, so resolution is done
+/// with plain filesystem checks instead.
+fn find_in_path(interpreter: &str, entries: &[String]) -> Option<String> {
+    let name = if interpreter.to_lowercase().ends_with(".exe") {
+        interpreter.to_string()
+    } else {
+        format!("{}.exe", interpreter)
+    };
+    for entry in entries {
+        if entry.is_empty() {
+            continue;
+        }
+        let candidate = Path::new(entry).join(&name);
+        if candidate.is_file() {
+            return Some(candidate.to_string_lossy().to_string());
+        }
+    }
+    None
+}
+
 #[tauri::command]
 fn resolve_interpreter_path(interpreter: String) -> Result<String, String> {
     if interpreter.is_empty() {
@@ -47,20 +69,13 @@ fn resolve_interpreter_path(interpreter: String) -> Result<String, String> {
     if is_absolute_windows_path(&interpreter) {
         return Ok(interpreter);
     }
-    let output = std::process::Command::new("where.exe")
-        .arg(&interpreter)
-        .output()
-        .map_err(|e| format!("failed to locate interpreter {}: {}", interpreter, e))?;
-    if output.status.success() {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        for line in stdout.lines() {
-            let trimmed = line.trim();
-            if !trimmed.is_empty() {
-                return Ok(trimmed.to_string());
-            }
-        }
-    }
-    Err(format!("interpreter not found: {}", interpreter))
+    let entries: Vec<String> = std::env::var("PATH")
+        .unwrap_or_default()
+        .split(';')
+        .map(str::to_string)
+        .collect();
+    find_in_path(&interpreter, &entries)
+        .ok_or_else(|| format!("interpreter not found: {}", interpreter))
 }
 
 #[tauri::command]
@@ -465,6 +480,30 @@ mod tests {
             crate::resolve_interpreter_path("".to_string()).unwrap_err(),
             "interpreter cannot be empty"
         );
+    }
+
+    #[test]
+    fn test_find_in_path_locates_exe_without_spawning() {
+        let dir = create_temp_dir("find-in-path");
+        let fake = dir.join("python.exe");
+        fs::write(&fake, "").unwrap();
+        let result = crate::find_in_path("python", &[dir.to_string_lossy().to_string()]);
+        assert_eq!(result, Some(fake.to_string_lossy().to_string()));
+        assert_eq!(
+            crate::find_in_path("missing", &[dir.to_string_lossy().to_string()]),
+            None
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_find_in_path_handles_extension_already_present() {
+        let dir = create_temp_dir("find-in-path-ext");
+        let fake = dir.join("python3.exe");
+        fs::write(&fake, "").unwrap();
+        let result = crate::find_in_path("python3.exe", &[dir.to_string_lossy().to_string()]);
+        assert_eq!(result, Some(fake.to_string_lossy().to_string()));
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
