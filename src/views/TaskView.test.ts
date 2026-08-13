@@ -69,6 +69,11 @@ describe('TaskView', () => {
 
     expect(container.querySelector('[data-testid="task-dialog"]')).toBeTruthy()
     expect(container.querySelector('[data-testid="script-select"]')).toBeTruthy()
+    const details = container.querySelector('[data-testid="task-details-fieldset"]')
+    expect(details).toBeTruthy()
+    expect(details?.classList.contains('fieldset')).toBe(true)
+    expect(details?.classList.contains('bg-base-200')).toBe(true)
+    expect(details?.querySelector('.fieldset-legend')?.textContent).toContain('Task details')
     app.unmount()
   })
 

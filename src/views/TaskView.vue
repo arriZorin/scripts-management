@@ -177,13 +177,20 @@ onMounted(load)
 
     <dialog v-if="isEditing" class="modal modal-open" data-testid="task-dialog" role="dialog">
       <div class="modal-box">
-        <h3 class="text-lg font-bold mb-4">{{ editingId ? 'Edit Task' : 'New Task' }}</h3>
-        <p v-if="error" class="alert alert-error mb-3">{{ error }}</p>
-        <label class="label"><span class="label-text">Name</span><input v-model="form.name" class="input input-bordered w-full" data-testid="task-name-input" /></label>
-        <label class="label"><span class="label-text">Script</span><select v-model="form.scriptId" class="select select-bordered w-full" data-testid="script-select"><option v-for="script in scripts" :key="script.id" :value="script.id">{{ script.name }}</option></select></label>
-        <label class="label"><span class="label-text">Python interpreter</span><input v-model="form.interpreter" class="input input-bordered w-full" data-testid="interpreter-input" /></label>
-        <label class="label"><span class="label-text">Arguments (space separated)</span><input :value="form.arguments.join(' ')" class="input input-bordered w-full" data-testid="arguments-input" @input="form.arguments = (($event.target as HTMLInputElement).value.trim() ? ($event.target as HTMLInputElement).value.trim().split(/\s+/) : [])" /></label>
-        <label class="label"><span class="label-text">Schedule</span><select :value="form.schedule.type" class="select select-bordered w-full" data-testid="schedule-type-select" @change="updateScheduleType(($event.target as HTMLSelectElement).value as Schedule['type'])"><option value="once">Once</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="interval">Interval</option></select></label>
+        <fieldset data-testid="task-details-fieldset" class="fieldset bg-base-200 border-base-300 rounded-box w-full border p-4">
+          <legend class="fieldset-legend">Task details</legend>
+          <label class="label">Name</label>
+          <input v-model="form.name" class="input input-bordered w-full" data-testid="task-name-input" placeholder="Daily backup" />
+          <label class="label">Script</label>
+          <select v-model="form.scriptId" class="select select-bordered w-full" data-testid="script-select"><option v-for="script in scripts" :key="script.id" :value="script.id">{{ script.name }}</option></select>
+          <label class="label">Python interpreter</label>
+          <input v-model="form.interpreter" class="input input-bordered w-full" data-testid="interpreter-input" placeholder="python" />
+          <label class="label">Arguments</label>
+          <input :value="form.arguments.join(' ')" class="input input-bordered w-full" data-testid="arguments-input" placeholder="--format json" @input="form.arguments = (($event.target as HTMLInputElement).value.trim() ? ($event.target as HTMLInputElement).value.trim().split(/\s+/) : [])" />
+          <label class="label">Schedule</label>
+          <select :value="form.schedule.type" class="select select-bordered w-full" data-testid="schedule-type-select" @change="updateScheduleType(($event.target as HTMLSelectElement).value as Schedule['type'])"><option value="once">Once</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="interval">Interval</option></select>
+          <p v-if="error" class="alert alert-error mt-3">{{ error }}</p>
+        </fieldset>
         <div class="modal-action"><button class="btn btn-primary" data-testid="save-task-btn" @click="save">Save</button><button class="btn" data-testid="cancel-task-btn" @click="closeForm">Cancel</button></div>
       </div>
     </dialog>
