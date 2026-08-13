@@ -266,6 +266,7 @@ Implementation notes:
 **Acceptance:** Every app action produces a visible log record tagged dev or prod, so dev/prod behavior (e.g. command latency) can be compared in the Logging page. ✅ Verified 2026-08-13: release exe wrote `mode:"prod"` startup entry, `bunx tauri dev` wrote `mode:"dev"` startup entry into the same logs.json; Logging page renders them newest-first with mode badges (unit-tested; GUI bridge was down so the page itself was verified via tests + the shared JSON artifact).
 
 2026-08-13: Phase 8 implemented as 3 TDD slices (Rust mode command, log services, Logging UI + run-now logging), each committed green.
+2026-08-13: Logging view extended — task enable/disable toggles now logged (task.toggle), Clear-all button with confirm modal, header shows entry count + earliest log date.
 
 ## Phase 9 — Final Verification
 
