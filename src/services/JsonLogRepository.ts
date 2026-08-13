@@ -27,4 +27,8 @@ export class JsonLogRepository implements LogRepository {
     const capped = entries.slice(-MAX_ENTRIES)
     await this.fileStorage.write(this.logsFilePath, logsToJson(capped))
   }
+
+  async clear(): Promise<void> {
+    await this.fileStorage.write(this.logsFilePath, logsToJson([]))
+  }
 }

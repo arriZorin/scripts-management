@@ -74,3 +74,25 @@ describe('AppLogger', () => {
     await expect(logger.record('app', 'startup')).resolves.toBeUndefined()
   })
 })
+
+describe('JsonLogRepository clear', () => {
+  it('removes all entries', async () => {
+    const storage = new FakeStorage()
+    const repository = new JsonLogRepository(storage, 'logs.json')
+    await repository.append({ id: 'id-1', mode: 'prod', level: 'info', source: 'app', message: 'startup', durationMs: null, createdAt: '2026-01-01T00:00:00.000Z' })
+    await repository.append({ id: 'id-2', mode: 'dev', level: 'error', source: 'task.run', message: 'boom', durationMs: 12, createdAt: '2026-01-01T00:00:01.000Z' })
+
+    await repository.clear()
+
+    expect(await repository.list()).toEqual([])
+  })
+
+  it('writes an empty array when there was no file yet', async () => {
+    const storage = new FakeStorage()
+    const repository = new JsonLogRepository(storage, 'logs.json')
+
+    await repository.clear()
+
+    expect(storage.content).toBe('[]')
+  })
+})
