@@ -32,7 +32,7 @@
             <td>{{ s.name }}</td>
             <td>{{ s.path }}</td>
             <td><span class="badge badge-info">{{ s.type }}</span></td>
-            <td>{{ s.createdAt }}</td>
+            <td :title="s.createdAt"><RelativeTime :date="s.createdAt" /></td>
             <td>
               <div class="join">
                 <button @click="openEditDialog(s)" :data-testid="`edit-script-${s.id}`" class="btn btn-xs btn-neutral join-item" :title="`Edit ${s.name}`">✏️</button>
@@ -105,7 +105,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, defineComponent, ref } from 'vue';
 import { useScripts } from '../services/scriptImport/useScripts';
 import { JsonScriptRepository } from '../services/JsonScriptRepository';
 import { TauriFileStorage } from '../services/TauriFileStorage';
@@ -113,6 +113,17 @@ import { TauriScriptPicker } from '../services/scriptImport/ScriptPicker';
 import { TauriFileScanner } from '../services/scriptImport/FileScanner';
 import { onMounted } from 'vue';
 import type { Script } from '../models/Script';
+import { useTimeAgo } from '@vueuse/core';
+
+const RelativeTime = defineComponent({
+  props: {
+    date: { type: String, required: true },
+  },
+  setup(props) {
+    const timeAgo = useTimeAgo(props.date);
+    return () => timeAgo.value;
+  },
+});
 
 interface Props {
   repository?: import('../services/ScriptRepository').ScriptRepository;

@@ -126,7 +126,8 @@ describe('ScriptsListView', () => {
 
     const rows = Array.from(container.querySelectorAll('tbody tr'))
     const listItems = rows.map((row) => row.textContent)
-    expect(listItems).toEqual(['backup.pyC:/scripts/backup.py2024-01-01T00:00:00.000Z✏️🗑️'])
+    expect(listItems[0]).toContain('backup.pyC:/scripts/backup.py')
+    expect(listItems[0]).toContain('✏️🗑️')
     expect(container.querySelector('.region.body')?.textContent).toContain('Added 0 script(s), skipped 1.')
 
     app.unmount()
@@ -176,13 +177,13 @@ describe('ScriptsListView', () => {
     expect(firstRowCells[0]).toBe('x.py')
     expect(firstRowCells[1]).toBe('C:/a/x.py')
     expect(firstRowCells[2]).toBe('python')
-    expect(firstRowCells[3]).toContain('2024') // At least contains the year
+    expect(firstRowCells[3]).toBeTruthy()
     expect(secondRowCells).toContain('y.py')
     expect(secondRowCells).toContain('C:/a/y.py')
     expect(secondRowCells[0]).toBe('y.py')
     expect(secondRowCells[1]).toBe('C:/a/y.py')
     expect(secondRowCells[2]).toBe('python')
-    expect(secondRowCells[3]).toContain('2024')
+    expect(secondRowCells[3]).toBeTruthy()
 
     app.unmount()
   })
@@ -208,7 +209,7 @@ describe('ScriptsListView', () => {
     expect(row.textContent).toContain('backup.py')
     expect(row.textContent).toContain('C:/scripts/backup.py')
     expect(row.textContent).toContain('python')
-    expect(row.textContent).toContain('2024-01-01')
+    expect(row.querySelector('td[title="2024-01-01T00:00:00.000Z"]')?.textContent).toBeTruthy()
 
     app.unmount()
   })
