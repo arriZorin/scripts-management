@@ -155,7 +155,7 @@ pub fn build_create_command(input: CreateScheduledTask) -> Result<CommandSpec, S
     }
     args.push(command);
     args.extend(schedule_args(&input.schedule)?);
-    args.extend(["/F".to_string(), "/RU".to_string(), "SYSTEM".to_string()]);
+    args.push("/F".to_string());
     Ok(spec(args))
 }
 
@@ -276,6 +276,27 @@ mod tests {
         .unwrap();
         let d_index_sat = args_sat.iter().position(|arg| arg == "/D").unwrap();
         assert_eq!(args_sat[d_index_sat + 1], "SAT");
+    }
+
+    #[test]
+    fn create_command_runs_as_current_user() {
+        let command = build_create_command(CreateScheduledTask {
+            task_name: "ScriptsManagement\\task-1".to_string(),
+            interpreter: "C:\\Python312\\python.exe".to_string(),
+            script_path: "C:\\Scripts\\backup.py".to_string(),
+            arguments: vec![],
+            working_directory: "C:\\Scripts".to_string(),
+            log_directory: "C:\\Logs".to_string(),
+            schedule: ScheduleSpec::Daily {
+                time: "08:30".to_string(),
+            },
+        })
+        .unwrap();
+        // /RU SYSTEM requires elevation (ERROR: Access is denied for
+        // non-admin schtasks /Create); the app must create tasks as the
+        // current user without any /RU switch.
+        assert!(!command.args.iter().any(|arg| arg == "/RU"));
+        assert!(command.args.contains(&"/F".to_string()));
     }
 
     #[test]

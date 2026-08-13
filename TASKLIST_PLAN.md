@@ -205,15 +205,22 @@ Implementation notes:
 - [x] Show success/error result
 - [x] Refresh task status after execution request
 - [x] Add frontend tests
-- [ ] Verify with a real harmless Python script
+- [x] Verify with a real harmless Python script
 
-**Acceptance:** Clicking Run now launches the selected Python script through Windows Task Scheduler. ⏳ Pending real Windows smoke test.
+**Acceptance:** Clicking Run now launches the selected Python script through Windows Task Scheduler. ✅ Verified by real Windows smoke test (2026-08-13): created a task in the running app, confirmed registration in Task Scheduler, clicked Run Now (SUCCESS banner, task executed, Last Result recorded), deleted and confirmed removal.
 
 Implementation notes:
 
 - `TaskExecutor` separates frontend behavior from Tauri invocation.
 - `TauriTaskExecutor` invokes `run_scheduled_task` with the stable `ScriptsManagement\\<task-id>` name.
 - The UI tracks the active task, displays result/error feedback, and reloads tasks after execution.
+- `TaskScheduler`/`TauriTaskScheduler` sync the full task lifecycle to Windows Task Scheduler: create registers via `create_scheduled_task`, edit re-creates, toggle calls `set_scheduled_task_enabled`, delete removes the registered task.
+- `resolve_interpreter_path` resolves a relative interpreter (e.g. `python`) to an absolute path via `where.exe`; `get_log_directory` returns the app-local `logs` folder.
+- schtasks constraints discovered in e2e: `/Create` with `/RU SYSTEM` fails non-elevated with "Access is denied" (tasks are created as the current user instead); weekly `/D` rejects numeric day values (builder maps 0-6 to SUN..SAT).
+- Tauri `invoke` rejects with a plain string, so error handling surfaces the real schtasks message instead of a generic alert.
+- Caveat: interpreter resolution uses `where.exe` in the app's launch environment; existing pre-fix tasks (e.g. `bill`) are not registered until edited or toggled once.
+
+2026-08-13: Run Now bug fixed and e2e-verified (see commit log). Both delegated workers timed out; parent took over all slices.
 
 ## Phase 6 — Execution History
 
