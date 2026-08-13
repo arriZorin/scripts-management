@@ -12,6 +12,7 @@ export function useNavigation() {
     { id: 'home', label: 'Home' },
     { id: 'scripts-list', label: 'Scripts List' },
     { id: 'task', label: 'Task' },
+    { id: 'logging', label: 'Logging' },
     { id: 'setting', label: 'Setting' }
   ];
 

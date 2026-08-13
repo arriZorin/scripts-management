@@ -4,22 +4,29 @@ import { useNavigation } from './composables/useNavigation';
 import HomeView from './views/HomeView.vue';
 import ScriptsListView from './views/ScriptsListView.vue';
 import TaskView from './views/TaskView.vue';
+import LoggingView from './views/LoggingView.vue';
 import SettingView from './views/SettingView.vue';
 import HomeIcon from './components/icons/HomeIcon.vue';
 import ScriptsListIcon from './components/icons/ScriptsListIcon.vue';
 import TaskIcon from './components/icons/TaskIcon.vue';
+import LoggingIcon from './components/icons/LoggingIcon.vue';
 import SettingIcon from './components/icons/SettingIcon.vue';
 import type { Component } from 'vue';
 import type { Script } from './models/Script';
 import { TauriFileStorage } from './services/TauriFileStorage';
 import { JsonScriptRepository } from './services/JsonScriptRepository';
 import { JsonTaskRepository } from './services/JsonTaskRepository';
+import { JsonLogRepository } from './services/JsonLogRepository';
+import { AppLogger } from './services/AppLogger';
+import type { LogRepository } from './services/LogRepository';
 import type { ScriptRepository } from './services/ScriptRepository';
 import type { TaskRepository } from './services/TaskRepository';
 
 interface Props {
   scriptRepository?: ScriptRepository;
   taskRepository?: TaskRepository;
+  logRepository?: LogRepository;
+  logger?: AppLogger;
 }
 
 const props = defineProps<Props>();
@@ -28,6 +35,8 @@ const { navItems, activeView, setView } = useNavigation();
 
 const scriptRepository = props.scriptRepository ?? new JsonScriptRepository(new TauriFileStorage(), 'scripts.json');
 const taskRepository = props.taskRepository ?? new JsonTaskRepository(new TauriFileStorage(), 'tasks.json', scriptRepository);
+const logRepository = props.logRepository ?? new JsonLogRepository(new TauriFileStorage(), 'logs.json');
+const logger = props.logger ?? new AppLogger(logRepository);
 
 const scripts = ref<Script[]>([]);
 
@@ -47,6 +56,8 @@ const views = computed(() => {
       return ScriptsListView;
     case 'task':
       return TaskView;
+    case 'logging':
+      return LoggingView;
     case 'setting':
       return SettingView;
     default:
@@ -58,10 +69,14 @@ const viewIcons: Record<string, Component> = {
   home: HomeIcon,
   'scripts-list': ScriptsListIcon,
   task: TaskIcon,
+  logging: LoggingIcon,
   setting: SettingIcon,
 };
 
-onMounted(loadScripts);
+onMounted(() => {
+  loadScripts();
+  logger.record('app', 'startup');
+});
 </script>
 
 <template>
@@ -86,7 +101,7 @@ onMounted(loadScripts);
       </ul>
     </nav>
     <main class="main-content flex-1 p-4 overflow-y-auto">
-      <component :is="views" :task-repository="taskRepository" :scripts="scripts" />
+      <component :is="views" :task-repository="taskRepository" :scripts="scripts" :logger="logger" :log-repository="logRepository" />
     </main>
   </div>
 </template>

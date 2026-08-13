@@ -8,14 +8,15 @@ describe('useNavigation', () => {
     expect(activeView.value).toBe('home');
   });
 
-  it('nav items are exactly Home, Scripts List, Task, Setting', () => {
+  it('nav items are exactly Home, Scripts List, Task, Logging, Setting', () => {
     const { navItems } = useNavigation();
     
-    expect(navItems.length).toBe(4);
+    expect(navItems.length).toBe(5);
     expect(navItems).toEqual([
       { id: 'home', label: 'Home' },
       { id: 'scripts-list', label: 'Scripts List' },
       { id: 'task', label: 'Task' },
+      { id: 'logging', label: 'Logging' },
       { id: 'setting', label: 'Setting' }
     ]);
   });

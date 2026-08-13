@@ -41,6 +41,14 @@ class FakeTaskScheduler {
   }
 }
 
+class FakeLogger {
+  records: { source: string; message: string; level: string; durationMs: number | null }[] = []
+
+  async record(source: string, message: string, level = 'info', durationMs: number | null = null) {
+    this.records.push({ source, message, level, durationMs })
+  }
+}
+
 const script: Script = {
   id: 'script-1',
   name: 'backup.py',
@@ -69,10 +77,10 @@ class FakeTaskRepository {
   async delete(id: string) { this.items = this.items.filter(task => task.id !== id) }
 }
 
-function mountView(repository: FakeTaskRepository, executor = new FakeTaskExecutor(), scheduler = new FakeTaskScheduler()) {
+function mountView(repository: FakeTaskRepository, executor = new FakeTaskExecutor(), scheduler = new FakeTaskScheduler(), logger = new FakeLogger()) {
   const container = document.createElement('div')
   document.body.appendChild(container)
-  const app = createApp(TaskView, { taskRepository: repository, taskExecutor: executor, taskScheduler: scheduler, scripts: [script] })
+  const app = createApp(TaskView, { taskRepository: repository, taskExecutor: executor, taskScheduler: scheduler, logger, scripts: [script] })
   app.mount(container)
   return { container, app }
 }
@@ -248,5 +256,41 @@ it('removes the scheduled task when deleting a task', async () => {
   await flush()
 
   expect(scheduler.deletes).toEqual(['task-1'])
+  app.unmount()
+})
+
+it('logs a successful run with its duration', async () => {
+  const repository = new FakeTaskRepository()
+  await repository.create({ name: 'Run me', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', time: '08:00' }, enabled: true })
+  const logger = new FakeLogger()
+  const { container, app } = mountView(repository, new FakeTaskExecutor(), new FakeTaskScheduler(), logger)
+  await flush()
+
+  ;(container.querySelector('[data-testid="run-task-task-1"]') as HTMLElement).click()
+  await flush()
+
+  expect(logger.records).toHaveLength(1)
+  expect(logger.records[0].source).toBe('task.run')
+  expect(logger.records[0].level).toBe('info')
+  expect(logger.records[0].message).toContain('Task started')
+  expect(logger.records[0].durationMs).toBeGreaterThanOrEqual(0)
+  app.unmount()
+})
+
+it('logs a failed run as an error with the real message', async () => {
+  const repository = new FakeTaskRepository()
+  await repository.create({ name: 'Run me', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', time: '08:00' }, enabled: true })
+  const executor = new FakeTaskExecutor()
+  executor.error = 'ERROR: The system cannot find the file specified.'
+  const logger = new FakeLogger()
+  const { container, app } = mountView(repository, executor, new FakeTaskScheduler(), logger)
+  await flush()
+
+  ;(container.querySelector('[data-testid="run-task-task-1"]') as HTMLElement).click()
+  await flush()
+
+  expect(logger.records).toHaveLength(1)
+  expect(logger.records[0].level).toBe('error')
+  expect(logger.records[0].message).toContain('The system cannot find the file specified')
   app.unmount()
 })

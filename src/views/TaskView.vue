@@ -7,11 +7,13 @@ import { TauriTaskExecutor } from '../services/TaskExecutor'
 import type { TaskExecutor } from '../services/TaskExecutor'
 import { TauriTaskScheduler } from '../services/TaskScheduler'
 import type { TaskScheduler } from '../services/TaskScheduler'
+import type { AppLogger } from '../services/AppLogger'
 
 interface Props {
   taskRepository?: TaskRepository
   taskExecutor?: TaskExecutor
   taskScheduler?: TaskScheduler
+  logger?: AppLogger
   scripts?: Script[]
 }
 
@@ -127,11 +129,14 @@ async function runTask(task: Task) {
   runningTaskId.value = task.id
   operationResult.value = ''
   operationError.value = ''
+  const started = performance.now()
   try {
     operationResult.value = await taskExecutor.run(task)
+    await props.logger?.record('task.run', `run ${task.name}: ${operationResult.value}`, 'info', Math.round(performance.now() - started))
     await load()
   } catch (cause) {
     operationError.value = errorText(cause, 'Failed to run task.')
+    await props.logger?.record('task.run', `run ${task.name} failed: ${operationError.value}`, 'error', Math.round(performance.now() - started))
   } finally {
     runningTaskId.value = null
   }

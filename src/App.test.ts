@@ -3,7 +3,7 @@ import { createApp, nextTick } from 'vue';
 import App from './App.vue';
 
 describe('App', () => {
-  it('renders 4 nav buttons with exact labels: Home, Scripts List, Task, Setting', async () => {
+  it('renders 5 nav buttons with exact labels: Home, Scripts List, Task, Logging, Setting', async () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     
@@ -16,7 +16,7 @@ describe('App', () => {
     const buttons = container.querySelectorAll('nav button');
     const labels = Array.from(buttons).map(btn => btn.textContent?.trim());
     
-    expect(labels).toEqual(['Home', 'Scripts List', 'Task', 'Setting']);
+    expect(labels).toEqual(['Home', 'Scripts List', 'Task', 'Logging', 'Setting']);
     
     app.unmount();
     document.body.removeChild(container);
@@ -138,6 +138,60 @@ describe('App', () => {
     document.body.removeChild(container);
   });
 
+  it('clicking Logging button shows Logging content', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    
+    const app = createApp(App);
+    
+    app.mount(container);
+    await nextTick();
+    
+    // Initially Home should be shown
+    expect(container.innerHTML).toContain('Welcome to the application');
+    
+    // Find the button with text "Logging" and click it
+    const allButtons = container.querySelectorAll('button');
+    for (const btn of allButtons) {
+      const text = (btn as HTMLElement).textContent?.trim();
+      if (text === 'Logging') {
+        (btn as HTMLElement).click();
+        await nextTick();
+        break;
+      }
+    }
+    
+    // Now Logging content should be shown
+    expect(container.innerHTML).toContain('Application logs');
+    expect(container.innerHTML).not.toContain('Welcome to the application');
+    
+    app.unmount();
+    document.body.removeChild(container);
+  });
+
+  it('records a startup log entry on mount', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    
+    const records: { source: string; message: string }[] = [];
+    const fakeLogger = {
+      async record(source: string, message: string) {
+        records.push({ source, message });
+      },
+    };
+    
+    const app = createApp(App, { logger: fakeLogger as never });
+    app.mount(container);
+    await nextTick();
+    await Promise.resolve();
+    await nextTick();
+    
+    expect(records).toEqual([{ source: 'app', message: 'startup' }]);
+    
+    app.unmount();
+    document.body.removeChild(container);
+  });
+
   it('every view shows exactly one header.region, main.region.body, and footer.region', async () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
@@ -215,7 +269,7 @@ describe('App', () => {
     document.body.removeChild(container);
   });
 
-  it('renders an svg icon inside each of the 4 nav buttons', async () => {
+  it('renders an svg icon inside each of the 5 nav buttons', async () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     
@@ -227,7 +281,7 @@ describe('App', () => {
     // Check for navigation buttons with exact labels
     const buttons = container.querySelectorAll('nav button');
     
-    expect(buttons.length).toBe(4);
+    expect(buttons.length).toBe(5);
     
     // Each button should contain exactly one svg element
     const svgCounts = Array.from(buttons).map(btn => btn.querySelectorAll('svg').length);
