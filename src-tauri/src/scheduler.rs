@@ -175,10 +175,13 @@ pub fn build_update_command(task_name: &str, args: &[String]) -> Result<CommandS
 
 pub fn build_set_enabled_command(task_name: &str, enabled: bool) -> Result<CommandSpec, String> {
     validate_text(task_name, "task_name")?;
+    // /ENABLE and /DISABLE are flags of /Change; standalone
+    // /Enable|/Disable switches do not exist in schtasks.
     Ok(spec(vec![
-        if enabled { "/Enable" } else { "/Disable" }.to_string(),
+        "/Change".to_string(),
         "/TN".to_string(),
         task_name.to_string(),
+        if enabled { "/ENABLE" } else { "/DISABLE" }.to_string(),
     ]))
 }
 
@@ -300,21 +303,28 @@ mod tests {
     }
 
     #[test]
+    fn builds_set_enabled_commands_with_change() {
+        // schtasks has NO standalone /Enable|/Disable option; enable/disable
+        // are /ENABLE|/DISABLE flags of /Change (verified: standalone
+        // /Disable fails with "Invalid argument/option").
+        let enabled = build_set_enabled_command("ScriptsManagement\\task-1", true).unwrap();
+        assert_eq!(
+            enabled.args,
+            vec!["/Change", "/TN", "ScriptsManagement\\task-1", "/ENABLE"]
+        );
+        let disabled = build_set_enabled_command("ScriptsManagement\\task-1", false).unwrap();
+        assert_eq!(
+            disabled.args,
+            vec!["/Change", "/TN", "ScriptsManagement\\task-1", "/DISABLE"]
+        );
+    }
+
+    #[test]
     fn builds_lifecycle_commands() {
         assert!(build_update_command("ScriptsManagement\\task-1", &[])
             .unwrap()
             .args
             .contains(&"/Change".to_string()));
-        assert!(build_set_enabled_command("ScriptsManagement\\task-1", true)
-            .unwrap()
-            .args
-            .contains(&"/Enable".to_string()));
-        assert!(
-            build_set_enabled_command("ScriptsManagement\\task-1", false)
-                .unwrap()
-                .args
-                .contains(&"/Disable".to_string())
-        );
         assert!(build_run_command("ScriptsManagement\\task-1")
             .unwrap()
             .args

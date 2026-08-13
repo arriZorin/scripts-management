@@ -216,9 +216,9 @@ Implementation notes:
 - The UI tracks the active task, displays result/error feedback, and reloads tasks after execution.
 - `TaskScheduler`/`TauriTaskScheduler` sync the full task lifecycle to Windows Task Scheduler: create registers via `create_scheduled_task`, edit re-creates, toggle calls `set_scheduled_task_enabled`, delete removes the registered task.
 - `resolve_interpreter_path` resolves a relative interpreter (e.g. `python`) to an absolute path via `where.exe`; `get_log_directory` returns the app-local `logs` folder.
-- schtasks constraints discovered in e2e: `/Create` with `/RU SYSTEM` fails non-elevated with "Access is denied" (tasks are created as the current user instead); weekly `/D` rejects numeric day values (builder maps 0-6 to SUN..SAT).
+- schtasks constraints discovered in e2e: `/Create` with `/RU SYSTEM` fails non-elevated with "Access is denied" (tasks are created as the current user instead); weekly `/D` rejects numeric day values (builder maps 0-6 to SUN..SAT); enable/disable are `/ENABLE|/DISABLE` flags of `/Change` — standalone `/Enable|/Disable` switches do not exist and fail with "Invalid argument/option" (the original builder emitted the standalone form and the unit test enshrined the wrong contract).
 - Tauri `invoke` rejects with a plain string, so error handling surfaces the real schtasks message instead of a generic alert.
-- Caveat: interpreter resolution uses `where.exe` in the app's launch environment; existing pre-fix tasks (e.g. `bill`) are not registered until edited or toggled once.
+- Caveat: interpreter resolution uses `where.exe` in the app's launch environment; existing pre-fix tasks (e.g. `bill`) are not registered until edited and saved once (toggle only enables/disables; it does not register).
 
 2026-08-13: Run Now bug fixed and e2e-verified (see commit log). Both delegated workers timed out; parent took over all slices.
 
