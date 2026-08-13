@@ -1,21 +1,23 @@
 <template>
   <div class="view-container w-full">
-    <header class="region header p-4 m-2 rounded border border-gray-300 bg-gray-100 mb-4 dark:bg-[#2f2f2f] dark:border-[#404040] flex items-center justify-between">
-      <div>
+    <header class="region header card p-4 m-2 rounded border border-gray-300 bg-gray-100 mb-4 dark:bg-[#2f2f2f] dark:border-[#404040] flex items-center justify-between">
+      <div class="card-body">
         <h1 class="text-xl font-semibold">Scripts List</h1>
         <p class="text-gray-600">Manage your Python scripts</p>
       </div>
-      <button @click="handleRefresh" class="px-3 py-2 rounded bg-gray-600 text-white hover:bg-gray-500" data-testid="refresh-btn">Refresh</button>
+      <button @click="handleRefresh" class="btn btn-ghost px-3 py-2 rounded bg-gray-600 text-white hover:bg-gray-500" data-testid="refresh-btn">Refresh</button>
     </header>
-    <main class="region body p-4 m-2 rounded border border-gray-300 bg-white min-h-[200px] dark:bg-[#333333] dark:border-[#404040]">
+    <main class="region body card p-4 m-2 rounded border border-gray-300 bg-white min-h-[200px] dark:bg-[#333333] dark:border-[#404040]">
       <div class="flex gap-2 mb-4">
-        <button @click="handleAddFile" class="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-500 btn-script-action" data-testid="add-file-btn">Add File</button>
-        <button @click="handleAddFolder" class="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-500 btn-script-action" data-testid="add-folder-btn">Add Folder</button>
+        <button @click="handleAddFile" class="btn btn-primary px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-500 btn-script-action" data-testid="add-file-btn">Add File</button>
+        <button @click="handleAddFolder" class="btn btn-primary px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-500 btn-script-action" data-testid="add-folder-btn">Add Folder</button>
       </div>
-      <p v-if="busy" class="text-gray-600">Adding...</p>
-      <p v-if="error" role="alert" class="text-red-600">{{ error }}</p>
-      <p v-if="summary" class="text-gray-600">{{ summary }}</p>
-      <table data-testid="script-table" class="w-full text-sm">
+      <div class="card-body">
+        <p v-if="busy" class="alert alert-info text-gray-600">Adding...</p>
+        <p v-if="error" role="alert" class="alert alert-error text-red-600">{{ error }}</p>
+        <p v-if="summary" class="alert alert-info text-gray-600">{{ summary }}</p>
+      </div>
+      <table data-testid="script-table" class="table table-zebra w-full text-sm">
         <thead>
           <tr>
             <th>Name</th>
@@ -28,15 +30,19 @@
           <tr v-for="s in scripts" :key="s.id">
             <td>{{ s.name }}</td>
             <td>{{ s.path }}</td>
-            <td>{{ s.type }}</td>
+            <td><span class="badge badge-info">{{ s.type }}</span></td>
             <td>{{ s.createdAt }}</td>
           </tr>
         </tbody>
       </table>
-      <p v-if="scripts.length === 0" class="text-gray-600">No scripts yet. Add a .py file or folder.</p>
+      <div class="card-body">
+        <p v-if="scripts.length === 0" class="alert alert-info text-gray-600">No scripts yet. Add a .py file or folder.</p>
+      </div>
     </main>
-    <footer class="region footer p-4 m-2 rounded border border-gray-300 bg-gray-100 mt-4 text-center text-sm text-gray-500 dark:bg-[#2f2f2f] dark:border-[#404040] dark:text-[#999999]">
-      <p>&copy; 2026 Scripts Management</p>
+    <footer class="region footer card p-4 m-2 rounded border border-gray-300 bg-gray-100 mt-4 text-center text-sm text-gray-500 dark:bg-[#2f2f2f] dark:border-[#404040] dark:text-[#999999]">
+      <div class="card-body">
+        <p>&copy; 2026 Scripts Management</p>
+      </div>
     </footer>
   </div>
 </template>

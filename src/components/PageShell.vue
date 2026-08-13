@@ -8,19 +8,19 @@
 
 <template>
   <div class="page-shell flex flex-col min-h-full">
-    <header class="region header p-4 m-2 rounded border border-gray-300 bg-gray-100 dark:bg-[#2f2f2f] dark:border-[#404040]">
+    <header class="region card header p-4 m-2 rounded border border-gray-300 bg-gray-100 dark:bg-[#2f2f2f] dark:border-[#404040]">
       <slot name="header">
-        <div class="header-content">Header</div>
+        <div class="card-body header-content">Header</div>
       </slot>
     </header>
-    <main class="region body p-4 m-2 rounded border border-gray-300 flex-grow dark:bg-[#333333] dark:border-[#404040]">
+    <main class="region card body p-4 m-2 rounded border border-gray-300 flex-grow dark:bg-[#333333] dark:border-[#404040]">
       <slot name="body">
-        <div class="body-content">Body</div>
+        <div class="card-body body-content">Body</div>
       </slot>
     </main>
-    <footer class="region footer p-4 m-2 rounded border border-gray-300 bg-gray-100 dark:bg-[#2f2f2f] dark:border-[#404040]">
+    <footer class="region card footer p-4 m-2 rounded border border-gray-300 bg-gray-100 dark:bg-[#2f2f2f] dark:border-[#404040]">
       <slot name="footer">
-        <div class="footer-content">Footer</div>
+        <div class="card-body footer-content">Footer</div>
       </slot>
     </footer>
   </div>
