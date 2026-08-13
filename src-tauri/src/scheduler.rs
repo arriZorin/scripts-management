@@ -101,11 +101,14 @@ fn schedule_args(schedule: &ScheduleSpec) -> Result<Vec<String>, String> {
             if *day_of_week > 6 {
                 return Err("day_of_week must be between 0 and 6".to_string());
             }
+            // schtasks accepts day NAMES for /D (numeric values are rejected).
+            // 0 = Sunday (JS Date.getDay() convention).
+            let day_name = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"][*day_of_week as usize];
             Ok(vec![
                 "/SC".to_string(),
                 "WEEKLY".to_string(),
                 "/D".to_string(),
-                day_of_week.to_string(),
+                day_name.to_string(),
                 "/ST".to_string(),
                 time.clone(),
             ])
@@ -255,6 +258,24 @@ mod tests {
             },
         });
         assert!(result.unwrap_err().contains("absolute"));
+    }
+
+    #[test]
+    fn builds_weekly_command_with_day_names() {
+        let args = schedule_args(&ScheduleSpec::Weekly {
+            day_of_week: 0,
+            time: "08:00".to_string(),
+        })
+        .unwrap();
+        let d_index = args.iter().position(|arg| arg == "/D").unwrap();
+        assert_eq!(args[d_index + 1], "SUN");
+        let args_sat = schedule_args(&ScheduleSpec::Weekly {
+            day_of_week: 6,
+            time: "08:00".to_string(),
+        })
+        .unwrap();
+        let d_index_sat = args_sat.iter().position(|arg| arg == "/D").unwrap();
+        assert_eq!(args_sat[d_index_sat + 1], "SAT");
     }
 
     #[test]

@@ -13,6 +13,46 @@ fn greet(name: &str) -> String {
 
 struct AppDataDir(PathBuf);
 
+fn is_absolute_windows_path(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.len() >= 3 && bytes[1] == b':' && (bytes[2] == b'\\' || bytes[2] == b'/')
+}
+
+fn log_dir(root: &Path) -> Result<PathBuf, String> {
+    let dir = root.join("logs");
+    fs::create_dir_all(&dir).map_err(|e| format!("failed to create log directory: {}", e))?;
+    Ok(dir)
+}
+
+#[tauri::command]
+fn resolve_interpreter_path(interpreter: String) -> Result<String, String> {
+    if interpreter.is_empty() {
+        return Err("interpreter cannot be empty".to_string());
+    }
+    if is_absolute_windows_path(&interpreter) {
+        return Ok(interpreter);
+    }
+    let output = std::process::Command::new("where.exe")
+        .arg(&interpreter)
+        .output()
+        .map_err(|e| format!("failed to locate interpreter {}: {}", interpreter, e))?;
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for line in stdout.lines() {
+            let trimmed = line.trim();
+            if !trimmed.is_empty() {
+                return Ok(trimmed.to_string());
+            }
+        }
+    }
+    Err(format!("interpreter not found: {}", interpreter))
+}
+
+#[tauri::command]
+fn get_log_directory(state: tauri::State<'_, AppDataDir>) -> Result<String, String> {
+    log_dir(&state.0).map(|path| path.to_string_lossy().to_string())
+}
+
 #[tauri::command]
 fn scan_files(folder: String) -> Result<Vec<String>, String> {
     let path = Path::new(&folder);
@@ -202,7 +242,9 @@ pub fn run() {
             delete_scheduled_task,
             set_scheduled_task_enabled,
             run_scheduled_task,
-            get_scheduled_task_status
+            get_scheduled_task_status,
+            resolve_interpreter_path,
+            get_log_directory
         ])
         .setup(|app| {
             let dir = app.path().app_local_data_dir()?;
@@ -317,5 +359,47 @@ mod tests {
         let result = crate::read_app_file(&dir, "C:\\Windows\\win.ini");
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), "absolute paths are not allowed");
+    }
+
+    #[test]
+    fn test_is_absolute_windows_path_true_for_drive_paths() {
+        assert!(crate::is_absolute_windows_path("C:\\Python312\\python.exe"));
+        assert!(crate::is_absolute_windows_path("D:/tools/python.exe"));
+    }
+
+    #[test]
+    fn test_is_absolute_windows_path_false_for_relative() {
+        assert!(!crate::is_absolute_windows_path("python"));
+        assert!(!crate::is_absolute_windows_path(""));
+        assert!(!crate::is_absolute_windows_path("scripts/run.py"));
+    }
+
+    #[test]
+    fn test_resolve_interpreter_path_passthrough_for_absolute() {
+        assert_eq!(
+            crate::resolve_interpreter_path("C:\\Python312\\python.exe".to_string()).unwrap(),
+            "C:\\Python312\\python.exe"
+        );
+        assert_eq!(
+            crate::resolve_interpreter_path("D:/tools/python.exe".to_string()).unwrap(),
+            "D:/tools/python.exe"
+        );
+    }
+
+    #[test]
+    fn test_resolve_interpreter_path_empty_errs() {
+        assert_eq!(
+            crate::resolve_interpreter_path("".to_string()).unwrap_err(),
+            "interpreter cannot be empty"
+        );
+    }
+
+    #[test]
+    fn test_log_dir_creates_logs_folder() {
+        let dir = create_temp_dir("logs");
+        let result = crate::log_dir(&dir).unwrap();
+        assert_eq!(result, dir.join("logs"));
+        assert!(result.is_dir());
+        let _ = fs::remove_dir_all(&dir);
     }
 }
