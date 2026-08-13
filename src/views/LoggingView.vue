@@ -12,13 +12,29 @@ interface Props {
 const props = defineProps<Props>()
 const logRepository = props.logRepository ?? new JsonLogRepository(new TauriFileStorage(), 'logs.json')
 const logs = ref<LogEntry[]>([])
+const stats = ref<{ count: number; createdDate: string } | null>(null)
+const clearTarget = ref(false)
 
 async function load() {
   try {
-    logs.value = [...(await logRepository.list())].reverse().slice(0, 100)
+    const entries = await logRepository.list()
+    logs.value = [...entries].reverse().slice(0, 100)
+    stats.value = entries.length === 0
+      ? null
+      : {
+          count: entries.length,
+          createdDate: new Date(Math.min(...entries.map(entry => Date.parse(entry.createdAt)))).toLocaleString(),
+        }
   } catch {
     logs.value = []
+    stats.value = null
   }
+}
+
+async function confirmClear() {
+  clearTarget.value = false
+  await logRepository.clear()
+  await load()
 }
 
 onMounted(load)
@@ -31,8 +47,12 @@ onMounted(load)
         <div>
           <h1 class="text-xl font-semibold">Logging</h1>
           <p class="text-gray-600">Application logs — dev/prod activity record</p>
+          <p v-if="stats" class="text-sm text-gray-500" data-testid="log-stats">{{ stats.count }} entries · since {{ stats.createdDate }}</p>
         </div>
-        <button class="btn btn-primary" data-testid="log-refresh-btn" @click="load">Refresh</button>
+        <div class="flex gap-2">
+          <button class="btn btn-error" data-testid="log-clear-btn" @click="clearTarget = true">Clear</button>
+          <button class="btn btn-primary" data-testid="log-refresh-btn" @click="load">Refresh</button>
+        </div>
       </div>
     </header>
     <main class="region body card p-4 m-2 rounded border border-gray-300 bg-white min-h-[200px] dark:bg-[#333333] dark:border-[#404040]">
@@ -52,6 +72,10 @@ onMounted(load)
       </table>
     </main>
     <footer class="region footer card p-4 m-2 rounded border border-gray-300 bg-gray-100 mt-4 text-center text-sm text-gray-500 dark:bg-[#2f2f2f] dark:border-[#404040] dark:text-[#999999]"><div class="card-body"><p>&copy; 2026 Scripts Management</p></div></footer>
+
+    <dialog v-if="clearTarget" class="modal modal-open" data-testid="log-clear-dialog" role="dialog">
+      <div class="modal-box"><h3 class="text-lg font-bold">Clear Logs</h3><p class="py-4">Remove all {{ stats?.count ?? '' }} log entries?</p><div class="modal-action"><button class="btn btn-error" data-testid="confirm-log-clear-btn" @click="confirmClear">Clear</button><button class="btn" data-testid="cancel-log-clear-btn" @click="clearTarget = false">Cancel</button></div></div>
+    </dialog>
   </div>
 </template>
 

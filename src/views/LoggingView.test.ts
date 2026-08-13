@@ -13,6 +13,10 @@ class FakeLogRepository {
   async append(entry: LogEntry) {
     this.items.push(entry)
   }
+
+  async clear() {
+    this.items = []
+  }
 }
 
 function entry(overrides: Partial<LogEntry> = {}): LogEntry {
@@ -81,6 +85,55 @@ describe('LoggingView', () => {
     await flush()
 
     expect(Array.from(container.querySelectorAll('[data-testid^="log-row-"]'))).toHaveLength(2)
+    app.unmount()
+  })
+
+  it('shows entry count and earliest creation date in the header', async () => {
+    const repository = new FakeLogRepository()
+    await repository.append(entry({ id: 'l1', createdAt: '2026-08-12T10:00:00.000Z' }))
+    await repository.append(entry({ id: 'l2', createdAt: '2026-08-13T11:30:00.000Z' }))
+    const { container, app } = mountView(repository)
+    await flush()
+
+    const stats = container.querySelector('[data-testid="log-stats"]')?.textContent
+    expect(stats).toContain('2 entries')
+    expect(stats).toContain('12/08/2026')
+    expect(stats).not.toContain('13/08/2026')
+    app.unmount()
+  })
+
+  it('clears all logs through the confirmation dialog', async () => {
+    const repository = new FakeLogRepository()
+    await repository.append(entry({ id: 'l1', message: 'first' }))
+    const { container, app } = mountView(repository)
+    await flush()
+
+    ;(container.querySelector('[data-testid="log-clear-btn"]') as HTMLElement).click()
+    await nextTick()
+    expect(container.querySelector('[data-testid="log-clear-dialog"]')).toBeTruthy()
+
+    ;(container.querySelector('[data-testid="confirm-log-clear-btn"]') as HTMLElement).click()
+    await flush()
+
+    expect(repository.items).toHaveLength(0)
+    expect(container.querySelector('[data-testid="log-empty-state"]')).toBeTruthy()
+    expect(container.querySelector('[data-testid="log-stats"]')).toBeNull()
+    app.unmount()
+  })
+
+  it('cancelling the clear dialog keeps the logs', async () => {
+    const repository = new FakeLogRepository()
+    await repository.append(entry({ id: 'l1', message: 'first' }))
+    const { container, app } = mountView(repository)
+    await flush()
+
+    ;(container.querySelector('[data-testid="log-clear-btn"]') as HTMLElement).click()
+    await nextTick()
+    ;(container.querySelector('[data-testid="cancel-log-clear-btn"]') as HTMLElement).click()
+    await flush()
+
+    expect(repository.items).toHaveLength(1)
+    expect(container.querySelector('[data-testid="log-clear-dialog"]')).toBeNull()
     app.unmount()
   })
 })
