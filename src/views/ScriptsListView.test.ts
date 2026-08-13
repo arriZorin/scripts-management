@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { createApp, nextTick } from 'vue'
 import ScriptsListView from './ScriptsListView.vue'
 
@@ -268,23 +268,44 @@ describe('ScriptsListView', () => {
     app.unmount()
   })
 
-  it('deletes a script only after confirmation', async () => {
+  it('deletes a script only after modal confirmation', async () => {
     const repo = new FakeScriptRepository([{
       id: 'delete-1', name: 'remove.py', path: 'C:/remove.py', type: 'python',
       createdAt: '2024-01-01T00:00:00.000Z', updatedAt: '2024-01-01T00:00:00.000Z',
     }])
     const { container, app } = mountView(repo, new FakeScriptPicker(), new FakeFileScanner())
     await flush()
-    window.confirm = vi.fn().mockReturnValue(false)
-    const confirm = window.confirm as ReturnType<typeof vi.fn>
     ;(container.querySelector('[data-testid="delete-script-delete-1"]') as HTMLElement).click()
-    await flush()
+    await nextTick()
     expect(repo.items).toHaveLength(1)
-    confirm.mockReturnValue(true)
+    ;(container.querySelector('[data-testid="cancel-delete-btn"]') as HTMLElement).click()
+    await nextTick()
+    expect(repo.items).toHaveLength(1)
     ;(container.querySelector('[data-testid="delete-script-delete-1"]') as HTMLElement).click()
+    await nextTick()
+    ;(container.querySelector('[data-testid="confirm-delete-btn"]') as HTMLElement).click()
     await flush()
     expect(repo.items).toHaveLength(0)
-    confirm.mockRestore()
+    app.unmount()
+  })
+
+  it('opens a daisyUI confirmation dialog before deleting', async () => {
+    const repo = new FakeScriptRepository([{
+      id: 'dialog-1', name: 'confirm.py', path: 'C:/confirm.py', type: 'python',
+      createdAt: '2024-01-01T00:00:00.000Z', updatedAt: '2024-01-01T00:00:00.000Z',
+    }])
+    const { container, app } = mountView(repo, new FakeScriptPicker(), new FakeFileScanner())
+    await flush()
+
+    ;(container.querySelector('[data-testid="delete-script-dialog-1"]') as HTMLElement).click()
+    await nextTick()
+
+    const dialog = container.querySelector('[data-testid="delete-dialog"]')
+    expect(dialog).toBeTruthy()
+    expect(dialog?.classList.contains('modal')).toBe(true)
+    expect(dialog?.textContent).toContain('confirm.py')
+    expect(repo.items).toHaveLength(1)
+
     app.unmount()
   })
 })

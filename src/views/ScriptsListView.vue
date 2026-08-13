@@ -43,6 +43,7 @@
         </tbody>
       </table>
 
+
       <!-- Edit Dialog -->
       <div v-if="isEditing" role="dialog" data-testid="edit-dialog" class="modal-box p-4 max-w-md">
         <h3 class="text-lg font-bold mb-4">Edit Script</h3>
@@ -70,6 +71,27 @@
           </div>
         </div>
       </div>
+
+      <!-- Delete Confirmation Modal -->
+      <dialog id="delete-dialog" v-if="deleteTarget" data-testid="delete-dialog" class="modal modal-open" role="dialog">
+        <div class="modal-box p-4 max-w-md">
+          <h3 class="text-lg font-bold mb-2">Delete Script</h3>
+          <p class="text-gray-600 mb-4">Are you sure you want to delete <strong>{{ deleteTarget.name }}</strong>?</p>
+          <div class="flex justify-between items-center">
+            <div class="text-sm text-gray-500">
+              <div class="mb-1">Path: <span class="script-name">{{ deleteTarget.path }}</span></div>
+              <div>Type: <span class="script-name">{{ deleteTarget.type }}</span></div>
+            </div>
+            <div class="flex gap-2">
+              <button @click="confirmDelete" data-testid="confirm-delete-btn" class="btn btn-error btn-sm">Delete</button>
+              <button @click="cancelDelete" data-testid="cancel-delete-btn" class="btn btn-ghost btn-sm">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <form method="dialog" class="modal-backdrop">
+          <button @click.prevent="cancelDelete">close</button>
+        </form>
+      </dialog>
       <div class="card-body">
         <p v-if="scripts.length === 0" class="alert alert-info text-gray-600">No scripts yet. Add a .py file or folder.</p>
       </div>
@@ -112,12 +134,15 @@ const summary = computed(() =>
   operationSummary.value || (lastResult.value ? `Added ${lastResult.value.added} script(s), skipped ${lastResult.value.skipped}.` : '')
 );
 
-// Edit/Delete state and refs
+// Edit state and refs
 const selectedScript = ref<Script | null>(null);
 const editName = ref('');
 const editDescription = ref('');
 const isEditing = ref(false);
 const editError = ref<string | null>(null);
+
+// Delete state
+const deleteTarget = ref<Script | null>(null);
 
 // Edit dialog handlers
 function openEditDialog(script: Script) {
@@ -164,16 +189,26 @@ async function handleDelete(script: Script) {
   if (!script) return;
 
   // Check user confirmation BEFORE deleting
-  const confirmed = window.confirm(`Are you sure you want to delete "${script.name}"? This action cannot be undone.`);
-  if (!confirmed) return;
+  deleteTarget.value = script;
+}
+
+function cancelDelete() {
+  deleteTarget.value = null;
+}
+
+async function confirmDelete() {
+  const target = deleteTarget.value;
+  if (!target) return;
 
   try {
-    await repository.delete(script.id);
+    await repository.delete(target.id);
     await load();
 
-    operationSummary.value = `Deleted ${script.name}.`;
+    operationSummary.value = `Deleted ${target.name}.`;
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to delete script.';
+  } finally {
+    deleteTarget.value = null;
   }
 }
 
