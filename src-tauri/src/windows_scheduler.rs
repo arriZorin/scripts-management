@@ -3,9 +3,10 @@ use std::os::windows::ffi::OsStrExt;
 use std::ptr;
 
 use winapi::ctypes::c_void;
+use winapi::shared::winerror::RPC_E_CHANGED_MODE;
 use winapi::um::combaseapi::{CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL};
 use winapi::um::oaidl::VARIANT;
-use winapi::um::objbase::COINIT_MULTITHREADED;
+use winapi::um::objbase::COINIT_APARTMENTTHREADED;
 use winapi::um::taskschd::{ITaskFolder, ITaskService, TaskScheduler};
 use winapi::{Class, Interface};
 
@@ -16,22 +17,26 @@ fn wide(value: &str) -> Vec<u16> {
         .collect()
 }
 
-struct ComGuard;
+struct ComGuard(bool);
 
 impl Drop for ComGuard {
     fn drop(&mut self) {
-        unsafe { CoUninitialize() }
+        if self.0 {
+            unsafe { CoUninitialize() }
+        }
     }
 }
 
 pub fn set_enabled(task_name: &str, enabled: bool) -> Result<String, String> {
-    let init = unsafe { CoInitializeEx(ptr::null_mut(), COINIT_MULTITHREADED) };
-    if init < 0 {
+    let init = unsafe { CoInitializeEx(ptr::null_mut(), COINIT_APARTMENTTHREADED) };
+    if init < 0 && init != RPC_E_CHANGED_MODE {
         return Err(format!(
             "failed to initialize Task Scheduler COM: 0x{init:08x}"
         ));
     }
-    let _com = ComGuard;
+    // RPC_E_CHANGED_MODE means this Tauri thread already has a COM apartment;
+    // COM calls are still valid, but this function must not uninitialize it.
+    let _com = ComGuard(init >= 0);
 
     let mut service: *mut ITaskService = ptr::null_mut();
     let hr = unsafe {
