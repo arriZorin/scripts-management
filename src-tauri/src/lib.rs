@@ -11,6 +11,19 @@ fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
+fn app_mode(debug: bool) -> &'static str {
+    if debug {
+        "dev"
+    } else {
+        "prod"
+    }
+}
+
+#[tauri::command]
+fn get_app_mode() -> String {
+    app_mode(cfg!(debug_assertions)).to_string()
+}
+
 struct AppDataDir(PathBuf);
 
 fn is_absolute_windows_path(value: &str) -> bool {
@@ -244,7 +257,8 @@ pub fn run() {
             run_scheduled_task,
             get_scheduled_task_status,
             resolve_interpreter_path,
-            get_log_directory
+            get_log_directory,
+            get_app_mode
         ])
         .setup(|app| {
             let dir = app.path().app_local_data_dir()?;
@@ -392,6 +406,12 @@ mod tests {
             crate::resolve_interpreter_path("".to_string()).unwrap_err(),
             "interpreter cannot be empty"
         );
+    }
+
+    #[test]
+    fn test_app_mode_reflects_build_profile() {
+        assert_eq!(crate::app_mode(true), "dev");
+        assert_eq!(crate::app_mode(false), "prod");
     }
 
     #[test]
