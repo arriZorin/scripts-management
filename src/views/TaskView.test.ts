@@ -295,7 +295,7 @@ it('logs a failed run as an error with the real message', async () => {
   app.unmount()
 })
 
-it('logs enable/disable toggles with the new state', async () => {
+it('logs enable/disable toggles with the new state and duration', async () => {
   const repository = new FakeTaskRepository()
   await repository.create({ name: 'Existing', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', time: '08:00' }, enabled: true })
   const logger = new FakeLogger()
@@ -312,6 +312,7 @@ it('logs enable/disable toggles with the new state', async () => {
   expect(logger.records[0].level).toBe('info')
   expect(logger.records[0].message).toContain('Existing')
   expect(logger.records[0].message).toContain('disabled')
+  expect(logger.records[0].durationMs).toBeGreaterThanOrEqual(0)
   expect(logger.records[1].message).toContain('enabled')
   app.unmount()
 })
