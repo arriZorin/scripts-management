@@ -198,16 +198,22 @@ Implementation notes:
 - Tauri commands return `Result<String, String>` with process stderr on failure.
 - Python executable, script, working-directory, and log-directory inputs require absolute Windows paths.
 
-## Phase 5 — Run Now
+## Phase 5 — Run Now ✅
 
-- [ ] Add Run now action to each task
-- [ ] Disable button while starting
-- [ ] Show success/error result
-- [ ] Refresh task status after execution request
-- [ ] Add frontend tests
+- [x] Add Run now action to each task
+- [x] Disable button while starting
+- [x] Show success/error result
+- [x] Refresh task status after execution request
+- [x] Add frontend tests
 - [ ] Verify with a real harmless Python script
 
-**Acceptance:** Clicking Run now launches the selected Python script through Windows Task Scheduler.
+**Acceptance:** Clicking Run now launches the selected Python script through Windows Task Scheduler. ⏳ Pending real Windows smoke test.
+
+Implementation notes:
+
+- `TaskExecutor` separates frontend behavior from Tauri invocation.
+- `TauriTaskExecutor` invokes `run_scheduled_task` with the stable `ScriptsManagement\\<task-id>` name.
+- The UI tracks the active task, displays result/error feedback, and reloads tasks after execution.
 
 ## Phase 6 — Execution History
 

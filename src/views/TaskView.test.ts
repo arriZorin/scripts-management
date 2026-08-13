@@ -4,6 +4,18 @@ import TaskView from './TaskView.vue'
 import type { Script } from '../models/Script'
 import type { Task, TaskInput } from '../models/Task'
 
+class FakeTaskExecutor {
+  calls: string[] = []
+  result = 'Task started'
+  error: Error | null = null
+
+  async run(task: Task) {
+    this.calls.push(task.id)
+    if (this.error) throw this.error
+    return this.result
+  }
+}
+
 const script: Script = {
   id: 'script-1',
   name: 'backup.py',
@@ -32,10 +44,10 @@ class FakeTaskRepository {
   async delete(id: string) { this.items = this.items.filter(task => task.id !== id) }
 }
 
-function mountView(repository: FakeTaskRepository) {
+function mountView(repository: FakeTaskRepository, executor = new FakeTaskExecutor()) {
   const container = document.createElement('div')
   document.body.appendChild(container)
-  const app = createApp(TaskView, { taskRepository: repository, scripts: [script] })
+  const app = createApp(TaskView, { taskRepository: repository, taskExecutor: executor, scripts: [script] })
   app.mount(container)
   return { container, app }
 }
@@ -104,5 +116,20 @@ it('edits, toggles, and deletes a task through row actions', async () => {
   ;(container.querySelector('[data-testid="confirm-task-delete-btn"]') as HTMLElement).click()
   await flush()
   expect(repository.items).toHaveLength(0)
+  app.unmount()
+})
+
+it('runs a task now and shows the executor result', async () => {
+  const repository = new FakeTaskRepository()
+  await repository.create({ name: 'Run me', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', time: '08:00' }, enabled: true })
+  const executor = new FakeTaskExecutor()
+  const { container, app } = mountView(repository, executor)
+  await flush()
+
+  ;(container.querySelector('[data-testid="run-task-task-1"]') as HTMLElement).click()
+  await flush()
+
+  expect(executor.calls).toEqual(['task-1'])
+  expect(container.querySelector('[data-testid="task-operation-result"]')?.textContent).toContain('Task started')
   app.unmount()
 })

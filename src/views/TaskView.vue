@@ -3,9 +3,12 @@ import { onMounted, ref } from 'vue'
 import type { Script } from '../models/Script'
 import type { Schedule, Task, TaskInput } from '../models/Task'
 import type { TaskRepository } from '../services/TaskRepository'
+import { TauriTaskExecutor } from '../services/TaskExecutor'
+import type { TaskExecutor } from '../services/TaskExecutor'
 
 interface Props {
   taskRepository?: TaskRepository
+  taskExecutor?: TaskExecutor
   scripts?: Script[]
 }
 
@@ -18,12 +21,16 @@ const taskRepository: TaskRepository = props.taskRepository ?? {
   update: async () => { throw new Error('Task repository is not configured') },
   delete: async () => undefined,
 }
+const taskExecutor = props.taskExecutor ?? new TauriTaskExecutor()
 const tasks = ref<Task[]>([])
 const isEditing = ref(false)
 const editingId = ref<string | null>(null)
 const deleteTarget = ref<Task | null>(null)
 const error = ref('')
 const form = ref<TaskInput>(emptyForm())
+const runningTaskId = ref<string | null>(null)
+const operationResult = ref('')
+const operationError = ref('')
 
 function emptyForm(): TaskInput {
   return {
@@ -94,6 +101,20 @@ async function toggle(task: Task) {
   await load()
 }
 
+async function runTask(task: Task) {
+  runningTaskId.value = task.id
+  operationResult.value = ''
+  operationError.value = ''
+  try {
+    operationResult.value = await taskExecutor.run(task)
+    await load()
+  } catch (cause) {
+    operationError.value = cause instanceof Error ? cause.message : 'Failed to run task.'
+  } finally {
+    runningTaskId.value = null
+  }
+}
+
 function requestDelete(task: Task) {
   deleteTarget.value = task
 }
@@ -131,6 +152,8 @@ onMounted(load)
       </div>
     </header>
     <main class="region body card p-4 m-2 rounded border border-gray-300 bg-white min-h-[200px] dark:bg-[#333333] dark:border-[#404040]">
+      <p v-if="operationResult" class="alert alert-success mb-3" data-testid="task-operation-result">{{ operationResult }}</p>
+      <p v-if="operationError" class="alert alert-error mb-3" data-testid="task-operation-error">{{ operationError }}</p>
       <p v-if="tasks.length === 0" class="alert alert-info" data-testid="task-empty-state">No tasks yet.</p>
       <table v-else class="table table-zebra w-full" data-testid="task-table">
         <thead><tr><th>Name</th><th>Script</th><th>Schedule</th><th>Status</th><th>Actions</th></tr></thead>
@@ -143,6 +166,7 @@ onMounted(load)
             <td><div class="join">
               <button class="btn btn-xs join-item" :data-testid="`edit-task-${task.id}`" @click="openEdit(task)">Edit</button>
               <button class="btn btn-xs join-item" :data-testid="`toggle-task-${task.id}`" @click="toggle(task)">{{ task.enabled ? 'Disable' : 'Enable' }}</button>
+              <button class="btn btn-xs btn-primary join-item" :data-testid="`run-task-${task.id}`" :disabled="runningTaskId === task.id" @click="runTask(task)">{{ runningTaskId === task.id ? 'Starting...' : 'Run Now' }}</button>
               <button class="btn btn-xs btn-error join-item" :data-testid="`delete-task-${task.id}`" @click="requestDelete(task)">Delete</button>
             </div></td>
           </tr>
