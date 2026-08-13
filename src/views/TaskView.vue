@@ -93,6 +93,7 @@ function updateScheduleType(type: Schedule['type']) {
 
 async function save() {
   error.value = ''
+  const started = performance.now()
   try {
     if (!form.value.name.trim()) throw new Error('Task name is required')
     if (!form.value.scriptId) throw new Error('Script is required')
@@ -108,9 +109,11 @@ async function save() {
       await taskScheduler.create(task, script)
     }
     await load()
+    await props.logger?.record('task.create', `${editingId.value ? 'update' : 'create'} ${task.name}`, 'info', Math.round(performance.now() - started))
     closeForm()
   } catch (cause) {
     error.value = errorText(cause, 'Failed to save task.')
+    await props.logger?.record('task.create', `save ${form.value.name || 'task'} failed: ${error.value}`, 'error', Math.round(performance.now() - started))
   }
 }
 

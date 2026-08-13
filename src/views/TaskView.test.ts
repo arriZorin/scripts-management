@@ -129,6 +129,42 @@ describe('TaskView', () => {
     expect(container.querySelector('[data-testid="task-dialog"]')).toBeNull()
     app.unmount()
   })
+
+  it('logs a successful task creation with its name and duration', async () => {
+    const repository = new FakeTaskRepository()
+    const logger = new FakeLogger()
+    const { container, app } = mountView(repository, new FakeTaskExecutor(), new FakeTaskScheduler(), logger)
+    await flush()
+    ;(container.querySelector('[data-testid="new-task-btn"]') as HTMLElement).click()
+    await nextTick()
+
+    const name = container.querySelector('[data-testid="task-name-input"]') as HTMLInputElement
+    name.value = 'Logged task'
+    name.dispatchEvent(new Event('input', { bubbles: true }))
+    ;(container.querySelector('[data-testid="save-task-btn"]') as HTMLElement).click()
+    await flush()
+
+    expect(logger.records[0].source).toBe('task.create')
+    expect(logger.records[0].message).toContain('Logged task')
+    expect(logger.records[0].durationMs).toBeGreaterThanOrEqual(0)
+    app.unmount()
+  })
+
+  it('logs a failed save as an error with the real message', async () => {
+    const repository = new FakeTaskRepository()
+    const logger = new FakeLogger()
+    const { container, app } = mountView(repository, new FakeTaskExecutor(), new FakeTaskScheduler(), logger)
+    await flush()
+    ;(container.querySelector('[data-testid="new-task-btn"]') as HTMLElement).click()
+    await nextTick()
+    ;(container.querySelector('[data-testid="save-task-btn"]') as HTMLElement).click()
+    await flush()
+
+    expect(logger.records[0].source).toBe('task.create')
+    expect(logger.records[0].level).toBe('error')
+    expect(logger.records[0].message).toContain('Task name is required')
+    app.unmount()
+  })
 })
 
 it('edits, toggles, and deletes a task through row actions', async () => {
