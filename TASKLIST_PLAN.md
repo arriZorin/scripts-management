@@ -254,11 +254,25 @@ Implementation notes:
 
 **Acceptance:** The scheduler continues working when the app is closed and can recover from configuration drift.
 
-## Phase 8 — Final Verification
+## Phase 8 — Application Logging
+
+- [x] Add `get_app_mode` Tauri command (dev/prod)
+- [x] Add LogEntry model + JsonLogRepository (logs.json, capped at 200)
+- [x] Add AppLogger service (records mode, timestamp, duration)
+- [x] Add Logging sidebar menu + Logging view (recent logs, newest first, mode/level badges, refresh)
+- [x] Log app startup and task run-now results (success/error + duration)
+- [x] Real dev/prod smoke: release exe writes `prod` entries, `bunx tauri dev` writes `dev` entries
+
+**Acceptance:** Every app action produces a visible log record tagged dev or prod, so dev/prod behavior (e.g. command latency) can be compared in the Logging page. ✅ Verified 2026-08-13: release exe wrote `mode:"prod"` startup entry, `bunx tauri dev` wrote `mode:"dev"` startup entry into the same logs.json; Logging page renders them newest-first with mode badges (unit-tested; GUI bridge was down so the page itself was verified via tests + the shared JSON artifact).
+
+2026-08-13: Phase 8 implemented as 3 TDD slices (Rust mode command, log services, Logging UI + run-now logging), each committed green.
+
+## Phase 9 — Final Verification
 
 - [ ] Full frontend test suite
 - [ ] `bun run build`
 - [ ] Rust test suite
+- [ ] Real dev/prod comparison logged and reviewed
 - [ ] Real Windows Task Scheduler smoke test
 - [ ] Verify daily schedule
 - [ ] Verify disabled task does not run
