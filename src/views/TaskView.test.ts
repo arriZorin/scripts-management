@@ -294,3 +294,24 @@ it('logs a failed run as an error with the real message', async () => {
   expect(logger.records[0].message).toContain('The system cannot find the file specified')
   app.unmount()
 })
+
+it('logs enable/disable toggles with the new state', async () => {
+  const repository = new FakeTaskRepository()
+  await repository.create({ name: 'Existing', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', time: '08:00' }, enabled: true })
+  const logger = new FakeLogger()
+  const { container, app } = mountView(repository, new FakeTaskExecutor(), new FakeTaskScheduler(), logger)
+  await flush()
+
+  ;(container.querySelector('[data-testid="toggle-task-task-1"]') as HTMLElement).click()
+  await flush()
+  ;(container.querySelector('[data-testid="toggle-task-task-1"]') as HTMLElement).click()
+  await flush()
+
+  expect(logger.records).toHaveLength(2)
+  expect(logger.records[0].source).toBe('task.toggle')
+  expect(logger.records[0].level).toBe('info')
+  expect(logger.records[0].message).toContain('Existing')
+  expect(logger.records[0].message).toContain('disabled')
+  expect(logger.records[1].message).toContain('enabled')
+  app.unmount()
+})

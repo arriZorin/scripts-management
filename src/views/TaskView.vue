@@ -119,9 +119,11 @@ async function toggle(task: Task) {
   try {
     const updated = await taskRepository.update(task.id, { enabled: !task.enabled })
     await taskScheduler.setEnabled(updated.id, updated.enabled)
+    await props.logger?.record('task.toggle', `toggle ${updated.name}: ${updated.enabled ? 'enabled' : 'disabled'}`, 'info')
     await load()
   } catch (cause) {
     operationError.value = errorText(cause, 'Failed to update task.')
+    await props.logger?.record('task.toggle', `toggle ${task.name} failed: ${operationError.value}`, 'error')
   }
 }
 
