@@ -513,6 +513,24 @@ it('records a running run when Run Now succeeds', async () => {
   app.unmount()
 })
 
+it('disables Run Now for disabled tasks and does not invoke the executor', async () => {
+  const runRepository = new FakeTaskRunRepository()
+  const repository = new FakeTaskRepository()
+  await repository.create({ name: 'Disabled task', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', time: '08:00' }, enabled: false })
+  const executor = new FakeTaskExecutor()
+  const { container, app } = mountView(repository, executor, new FakeTaskScheduler(), new FakeLogger(), runRepository)
+  await flush()
+
+  const runButton = container.querySelector('[data-testid="run-task-task-1"]') as HTMLButtonElement
+  expect(runButton.disabled).toBe(true)
+  runButton.click()
+  await flush()
+
+  expect(executor.calls).toEqual([])
+  expect(runRepository.items).toHaveLength(0)
+  app.unmount()
+})
+
 it('records a failed run when Run Now errors', async () => {
   const runRepository = new FakeTaskRunRepository()
   const repository = new FakeTaskRepository()
