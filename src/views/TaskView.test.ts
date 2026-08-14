@@ -531,6 +531,54 @@ it('disables Run Now for disabled tasks and does not invoke the executor', async
   app.unmount()
 })
 
+it('defaults the schedule start date to today when creating a task', async () => {
+  const repository = new FakeTaskRepository()
+  const { container, app } = mountView(repository)
+  await flush()
+  ;(container.querySelector('[data-testid="new-task-btn"]') as HTMLElement).click()
+  await nextTick()
+
+  const picker = container.querySelector('[data-testid="start-date-picker"]')
+  expect(picker).toBeTruthy()
+  const trigger = container.querySelector('[data-testid="start-date-trigger"]')
+  expect(trigger?.textContent).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+
+  const name = container.querySelector('[data-testid="task-name-input"]') as HTMLInputElement
+  name.value = 'Start dated task'
+  name.dispatchEvent(new Event('input', { bubbles: true }))
+  ;(container.querySelector('[data-testid="save-task-btn"]') as HTMLElement).click()
+  await flush()
+
+  const saved = repository.items[0].schedule
+  expect(saved.type).toBe('daily')
+  if (saved.type === 'daily') expect(saved.startDate).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  app.unmount()
+})
+
+it('applies a picked start date to the task schedule', async () => {
+  const repository = new FakeTaskRepository()
+  const { container, app } = mountView(repository)
+  await flush()
+  ;(container.querySelector('[data-testid="new-task-btn"]') as HTMLElement).click()
+  await nextTick()
+
+  const picker = container.querySelector('[data-testid="start-date-picker"]') as HTMLElement
+  ;(picker as { value?: string }).value = '2026-09-01'
+  picker.dispatchEvent(new Event('change', { bubbles: true }))
+  await nextTick()
+
+  const name = container.querySelector('[data-testid="task-name-input"]') as HTMLInputElement
+  name.value = 'Picked date task'
+  name.dispatchEvent(new Event('input', { bubbles: true }))
+  ;(container.querySelector('[data-testid="save-task-btn"]') as HTMLElement).click()
+  await flush()
+
+  const saved = repository.items[0].schedule
+  expect(saved.type).toBe('daily')
+  if (saved.type === 'daily') expect(saved.startDate).toBe('2026-09-01')
+  app.unmount()
+})
+
 it('records a failed run when Run Now errors', async () => {
   const runRepository = new FakeTaskRunRepository()
   const repository = new FakeTaskRepository()

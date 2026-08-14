@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import type { Script } from '../models/Script'
 import type { Schedule, Task, TaskInput } from '../models/Task'
+import { todayDateString } from '../models/Task'
 import type { TaskRepository } from '../services/TaskRepository'
 import { TauriTaskExecutor } from '../services/TaskExecutor'
 import type { TaskExecutor } from '../services/TaskExecutor'
@@ -56,7 +57,7 @@ function emptyForm(): TaskInput {
     scriptId: scripts[0]?.id ?? '',
     interpreter: 'python',
     arguments: [],
-    schedule: { type: 'daily', time: '08:00' },
+    schedule: { type: 'daily', startDate: todayDateString(), time: '08:00' },
     enabled: true,
   }
 }
@@ -130,9 +131,26 @@ function closeForm() {
 
 function updateScheduleType(type: Schedule['type']) {
   if (type === 'once') form.value.schedule = { type, runAt: new Date(Date.now() + 3600000).toISOString() }
-  if (type === 'daily') form.value.schedule = { type, time: '08:00' }
-  if (type === 'weekly') form.value.schedule = { type, dayOfWeek: 1, time: '08:00' }
-  if (type === 'interval') form.value.schedule = { type, every: 1, unit: 'hours' }
+  if (type === 'daily') form.value.schedule = { type, startDate: todayDateString(), time: '08:00' }
+  if (type === 'weekly') form.value.schedule = { type, startDate: todayDateString(), dayOfWeek: 1, time: '08:00' }
+  if (type === 'interval') form.value.schedule = { type, startDate: todayDateString(), every: 1, unit: 'hours' }
+}
+
+function onStartDateChange(event: Event) {
+  const value = (event.target as { value?: string }).value
+  if (!value) return
+  const schedule = form.value.schedule
+  if (schedule.type === 'daily') form.value.schedule = { ...schedule, startDate: value }
+  if (schedule.type === 'weekly') form.value.schedule = { ...schedule, startDate: value }
+  if (schedule.type === 'interval') form.value.schedule = { ...schedule, startDate: value }
+}
+
+function scheduleStartDate(): string {
+  const schedule = form.value.schedule
+  if (schedule.type === 'daily') return schedule.startDate
+  if (schedule.type === 'weekly') return schedule.startDate
+  if (schedule.type === 'interval') return schedule.startDate
+  return ''
 }
 
 async function save() {
@@ -241,9 +259,9 @@ function errorText(cause: unknown, fallback: string): string {
 
 function scheduleLabel(schedule: Schedule): string {
   if (schedule.type === 'once') return `Once: ${schedule.runAt}`
-  if (schedule.type === 'daily') return `Daily: ${schedule.time}`
-  if (schedule.type === 'weekly') return `Weekly: ${schedule.dayOfWeek} ${schedule.time}`
-  return `Every ${schedule.every} ${schedule.unit}`
+  if (schedule.type === 'daily') return `Daily from ${schedule.startDate}: ${schedule.time}`
+  if (schedule.type === 'weekly') return `Weekly from ${schedule.startDate}: ${schedule.dayOfWeek} ${schedule.time}`
+  return `Every ${schedule.every} ${schedule.unit} from ${schedule.startDate}`
 }
 
 onMounted(() => {
@@ -330,6 +348,17 @@ onMounted(() => {
           <input :value="form.arguments.join(' ')" class="input input-bordered w-full" data-testid="arguments-input" placeholder="--format json" @input="form.arguments = (($event.target as HTMLInputElement).value.trim() ? ($event.target as HTMLInputElement).value.trim().split(/\s+/) : [])" />
           <label class="label">Schedule</label>
           <select :value="form.schedule.type" class="select select-bordered w-full" data-testid="schedule-type-select" @change="updateScheduleType(($event.target as HTMLSelectElement).value as Schedule['type'])"><option value="once">Once</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="interval">Interval</option></select>
+          <label v-if="form.schedule.type !== 'once'" class="label mt-2">Start date</label>
+          <div v-if="form.schedule.type !== 'once'" class="relative">
+            <button popoverTarget="start-date-popover" class="input input-bordered w-full text-left" data-testid="start-date-trigger" style="anchorName:--start-date-trigger" type="button">{{ scheduleStartDate() }}</button>
+            <div popover id="start-date-popover" class="dropdown bg-base-100 rounded-box shadow-lg" style="positionAnchor:--start-date-trigger">
+              <calendar-date class="cally" :value="scheduleStartDate()" data-testid="start-date-picker" @change="onStartDateChange">
+                <svg aria-label="Previous" class="fill-current size-4" slot="previous" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M15.75 19.5 8.25 12l7.5-7.5"></path></svg>
+                <svg aria-label="Next" class="fill-current size-4" slot="next" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m8.25 4.5 7.5 7.5-7.5 7.5"></path></svg>
+                <calendar-month></calendar-month>
+              </calendar-date>
+            </div>
+          </div>
           <p v-if="error" class="alert alert-error mt-3">{{ error }}</p>
         </fieldset>
         <div class="modal-action"><button class="btn btn-primary" data-testid="save-task-btn" @click="save">Save</button><button class="btn" data-testid="cancel-task-btn" @click="closeForm">Cancel</button></div>
