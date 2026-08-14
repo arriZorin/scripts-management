@@ -199,6 +199,8 @@ Implementation notes:
 - Tauri commands return `Result<String, String>` with process stderr on failure.
 - Python executable, script, working-directory, and log-directory inputs require absolute Windows paths.
 
+2026-08-14: **Interval-schedule trigger mapping fixed** (Windows COM path). Every interval unit previously mapped to a bogus `TASK_TRIGGER_REPETITION=10` — not a valid `TASK_TRIGGER_TYPE2` value, so `TriggerCollection.Create` failed and interval tasks never registered. Correct mapping (per MSDN daily-trigger example): minute/hour → a **Daily** base trigger + a repetition pattern (`Interval=PT#M/PT#H`, `Duration=""` for indefinite — the old `PT0S` zeroed out repetition); day → Daily + `DaysInterval`; week → Weekly + `WeeksInterval` + `DaysOfWeek` (weekday of start date); month → Monthly + `MonthsOfYear` bitmask aligned to start month mod N + `DaysOfMonth` (winapi has no `MonthsInterval`). Trigger construction is now driven by a pure `TriggerPlan` (`trigger_plan`) so the mapping is unit-testable without COM.
+
 ## Phase 5 — Run Now ✅
 
 - [x] Add Run now action to each task

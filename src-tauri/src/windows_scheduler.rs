@@ -17,20 +17,17 @@ use winapi::um::oaidl::VARIANT;
 use winapi::um::objbase::COINIT_APARTMENTTHREADED;
 use winapi::um::oleauto::{SysFreeString, SysStringLen, VariantInit};
 use winapi::um::taskschd::{
-    IAction, IActionCollection, IDailyTrigger, IExecAction, IRegisteredTask,
+    IAction, IActionCollection, IDailyTrigger, IExecAction, IMonthlyTrigger, IRegisteredTask,
     IRegisteredTaskCollection, IRegistrationInfo, IRepetitionPattern, ITaskDefinition, ITaskFolder,
     ITaskService, ITaskSettings, ITrigger, ITriggerCollection, IWeeklyTrigger, TaskScheduler,
     TASK_ACTION_EXEC, TASK_CREATE_OR_UPDATE, TASK_LOGON_INTERACTIVE_TOKEN, TASK_STATE_DISABLED,
     TASK_STATE_QUEUED, TASK_STATE_READY, TASK_STATE_RUNNING, TASK_STATE_UNKNOWN,
-    TASK_TRIGGER_DAILY, TASK_TRIGGER_TIME, TASK_TRIGGER_WEEKLY,
+    TASK_TRIGGER_DAILY, TASK_TRIGGER_MONTHLY, TASK_TRIGGER_TIME, TASK_TRIGGER_WEEKLY,
 };
 use winapi::um::winnt::LONG;
 use winapi::{Class, Interface};
 
 use crate::scheduler::ScheduleSpec;
-
-/// winapi does not export this trigger type constant (value per MSDN).
-const TASK_TRIGGER_REPETITION: u32 = 10;
 
 fn wide(value: &str) -> Vec<u16> {
     OsStr::new(value)
@@ -206,8 +203,181 @@ pub fn validate_datetime(value: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Describes exactly which Windows trigger to build for a schedule.
+///
+/// Kept pure so it is unit-testable without COM. Only one family of fields
+/// is populated per plan; the rest keep their defaults.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TriggerPlan {
+    /// Base trigger type (`TASK_TRIGGER_*`).
+    pub trigger_type: u32,
+    /// ISO `YYYY-MM-DDTHH:mm:00` start boundary.
+    pub start_boundary: String,
+    /// Repetition interval ISO (`PT#M`/`PT#H`), only for minute/hour units.
+    pub repetition_iso: Option<String>,
+    /// Native `DaysInterval` for a Daily trigger (1 = every day).
+    pub days_interval: u32,
+    /// Native `WeeksInterval` for a Weekly trigger (1 = every week).
+    pub weeks_interval: u32,
+    /// `DaysOfWeek` bitmask for a Weekly trigger (bit 0 = Sunday).
+    pub day_of_week: Option<i16>,
+    /// `MonthsOfYear` bitmask for a Monthly trigger (bit 0 = January).
+    pub months_of_year: Option<i16>,
+    /// `DaysOfMonth` bitmask for a Monthly trigger (bit 0 = 1st).
+    pub day_of_month: Option<i32>,
+}
+
+impl Default for TriggerPlan {
+    fn default() -> Self {
+        TriggerPlan {
+            trigger_type: TASK_TRIGGER_TIME,
+            start_boundary: String::new(),
+            repetition_iso: None,
+            days_interval: 0,
+            weeks_interval: 0,
+            day_of_week: None,
+            months_of_year: None,
+            day_of_month: None,
+        }
+    }
+}
+
+/// Parses `YYYY-MM-DD` (the date part of a validated start_at) into y/m/d.
+fn parse_ymd(date: &str) -> Result<(i64, i64, i64), String> {
+    let parts: Vec<&str> = date.split('-').collect();
+    if parts.len() != 3 {
+        return Err("invalid date".to_string());
+    }
+    let y = parts[0].parse::<i64>().map_err(|_| "invalid date")?;
+    let m = parts[1].parse::<i64>().map_err(|_| "invalid date")?;
+    let d = parts[2].parse::<i64>().map_err(|_| "invalid date")?;
+    Ok((y, m, d))
+}
+
+/// Days since 1970-01-01 (proleptic Gregorian, Howard Hinnant's algorithm).
+fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = y - era * 400; // [0, 399]
+    let mp = (m + 9) % 12; // Mar=0, ..., Feb=11
+    let doy = (153 * mp + 2) / 5 + d - 1; // [0, 365]
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy; // [0, 146096]
+    era * 146097 + doe - 719468
+}
+
+/// Weekday (0=Sunday .. 6=Saturday) for a `YYYY-MM-DD` date string.
+fn weekday_from_ymd(date: &str) -> Result<i64, String> {
+    let (y, m, d) = parse_ymd(date)?;
+    // 1970-01-01 was a Thursday (4, 0=Sunday).
+    Ok((days_from_civil(y, m, d) + 4).rem_euclid(7))
+}
+
+/// Builds the trigger plan for a schedule: minute/hour -> Daily base with a
+/// repetition pattern; day/week/month -> native trigger interval without
+/// repetition. Replaces the buggy mapping that used an invalid repetition
+/// trigger type for every interval unit.
+pub fn trigger_plan(schedule: &ScheduleSpec) -> Result<TriggerPlan, String> {
+    Ok(match schedule {
+        ScheduleSpec::Once { run_at } => {
+            validate_text(run_at, "run_at")?;
+            TriggerPlan {
+                trigger_type: TASK_TRIGGER_TIME,
+                start_boundary: run_at.clone(),
+                ..Default::default()
+            }
+        }
+        ScheduleSpec::Daily { start_at } => {
+            validate_datetime(start_at)?;
+            TriggerPlan {
+                trigger_type: TASK_TRIGGER_DAILY,
+                start_boundary: start_at.clone(),
+                days_interval: 1,
+                ..Default::default()
+            }
+        }
+        ScheduleSpec::Weekly {
+            start_at,
+            day_of_week,
+        } => {
+            validate_datetime(start_at)?;
+            if *day_of_week > 6 {
+                return Err("day_of_week must be between 0 and 6".to_string());
+            }
+            TriggerPlan {
+                trigger_type: TASK_TRIGGER_WEEKLY,
+                start_boundary: start_at.clone(),
+                weeks_interval: 1,
+                day_of_week: Some(1 << *day_of_week as i16),
+                ..Default::default()
+            }
+        }
+        ScheduleSpec::Interval {
+            start_at,
+            every,
+            unit,
+        } => {
+            validate_datetime(start_at)?;
+            if *every == 0 {
+                return Err("invalid interval".to_string());
+            }
+            let date = start_at.split('T').next().unwrap_or_default();
+            match unit.as_str() {
+                // Minute/hour intervals: Windows has no native "every X
+                // minutes/hours" trigger, so we build a Daily trigger (every
+                // day) plus a repetition pattern of the interval, repeated
+                // indefinitely (empty Duration). This is the documented
+                // pattern for sub-daily recurrence.
+                "minutes" | "hours" => TriggerPlan {
+                    trigger_type: TASK_TRIGGER_DAILY,
+                    start_boundary: start_at.clone(),
+                    repetition_iso: Some(repetition_interval_iso(*every, unit)?),
+                    days_interval: 1,
+                    ..Default::default()
+                },
+                "days" => TriggerPlan {
+                    trigger_type: TASK_TRIGGER_DAILY,
+                    start_boundary: start_at.clone(),
+                    days_interval: *every,
+                    ..Default::default()
+                },
+                "weeks" => TriggerPlan {
+                    trigger_type: TASK_TRIGGER_WEEKLY,
+                    start_boundary: start_at.clone(),
+                    weeks_interval: *every,
+                    // Every N weeks needs a day of week; default to the
+                    // weekday of the start date.
+                    day_of_week: Some((1 << weekday_from_ymd(date)?) as i16),
+                    ..Default::default()
+                },
+                "months" => {
+                    // winapi has no `MonthsInterval` property, so "every N
+                    // months" is expressed by selecting every month aligned
+                    // to the start month modulo N, wrapping through the year.
+                    let (_, start_month, start_day) = parse_ymd(date)?;
+                    let start_index = (start_month - 1) % *every as i64;
+                    let mut months: i16 = 0;
+                    for m in 0..12 {
+                        if m % *every as i64 == start_index {
+                            months |= 1 << m as i16;
+                        }
+                    }
+                    TriggerPlan {
+                        trigger_type: TASK_TRIGGER_MONTHLY,
+                        start_boundary: start_at.clone(),
+                        months_of_year: Some(months),
+                        day_of_month: Some((1 << (start_day - 1)) as i32),
+                        ..Default::default()
+                    }
+                }
+                _ => return Err("invalid interval".to_string()),
+            }
+        }
+    })
+}
+
 /// Trigger type plus start-boundary/interval ISO strings for a schedule.
 /// Kept pure so it is unit-testable without COM.
+#[cfg(test)]
 pub fn schedule_trigger_parts(schedule: &ScheduleSpec) -> Result<(u32, String, String), String> {
     match schedule {
         ScheduleSpec::Once { run_at } => {
@@ -230,12 +400,16 @@ pub fn schedule_trigger_parts(schedule: &ScheduleSpec) -> Result<(u32, String, S
         }
         ScheduleSpec::Interval {
             start_at,
-            every,
-            unit,
+            every: _,
+            unit: _,
         } => {
             validate_datetime(start_at)?;
-            let interval = repetition_interval_iso(*every, unit)?;
-            Ok((TASK_TRIGGER_REPETITION, start_at.clone(), interval))
+            let plan = trigger_plan(schedule)?;
+            Ok((
+                plan.trigger_type,
+                start_at.clone(),
+                plan.repetition_iso.unwrap_or_default(),
+            ))
         }
     }
 }
@@ -321,7 +495,8 @@ unsafe fn build_trigger(
     task: *mut ITaskDefinition,
     schedule: &ScheduleSpec,
 ) -> Result<*mut ITrigger, String> {
-    let (trigger_type, boundary, _interval) = schedule_trigger_parts(schedule)?;
+    let plan = trigger_plan(schedule)?;
+    let (trigger_type, boundary) = (plan.trigger_type, plan.start_boundary.clone());
 
     let mut triggers: *mut ITriggerCollection = ptr::null_mut();
     let hr = (*task).get_Triggers(&mut triggers);
@@ -339,10 +514,12 @@ unsafe fn build_trigger(
         return Err(e);
     }
 
-    if let ScheduleSpec::Interval { every, unit, .. } = schedule {
-        let interval = repetition_interval_iso(*every, unit)?;
-        let interval_wide = wide(&interval);
-        let duration_wide = wide("PT0S");
+    // Minute/hour intervals repeat via a repetition pattern on a Daily base
+    // trigger. An empty Duration repeats the pattern indefinitely; the old
+    // code set `PT0S` (zero duration), which silently disabled repetition.
+    if let Some(interval) = &plan.repetition_iso {
+        let interval_wide = wide(interval);
+        let duration_wide = wide("");
         let mut repetition: *mut IRepetitionPattern = ptr::null_mut();
         let hr = unsafe { (*trigger).get_Repetition(&mut repetition) };
         if hr < 0 {
@@ -350,51 +527,81 @@ unsafe fn build_trigger(
             return Err(format!("failed to get repetition pattern: 0x{hr:08x}"));
         }
         let hr = unsafe { (*repetition).put_Interval(interval_wide.as_ptr() as *mut u16) };
-        if hr >= 0 {
-            let hr = unsafe { (*repetition).put_Duration(duration_wide.as_ptr() as *mut u16) };
-            if hr < 0 {
-                (*repetition).Release();
-                (*trigger).Release();
-                return Err(format!("failed to set repetition duration: 0x{hr:08x}"));
-            }
-        } else {
+        if hr < 0 {
             (*repetition).Release();
             (*trigger).Release();
             return Err(format!("failed to set repetition interval: 0x{hr:08x}"));
         }
+        let hr = unsafe { (*repetition).put_Duration(duration_wide.as_ptr() as *mut u16) };
         unsafe { (*repetition).Release() };
+        if hr < 0 {
+            (*trigger).Release();
+            return Err(format!("failed to set repetition duration: 0x{hr:08x}"));
+        }
+    }
+
+    if let Err(e) = set_trigger_specifics(trigger, &plan) {
+        (*trigger).Release();
+        return Err(e);
     }
 
     Ok(trigger)
 }
 
-unsafe fn set_trigger_specifics(
-    trigger: *mut ITrigger,
-    schedule: &ScheduleSpec,
-) -> Result<(), String> {
-    match schedule {
-        ScheduleSpec::Daily { .. } => {
+unsafe fn set_trigger_specifics(trigger: *mut ITrigger, plan: &TriggerPlan) -> Result<(), String> {
+    match plan.trigger_type {
+        TASK_TRIGGER_DAILY => {
             let mut daily: *mut IDailyTrigger = ptr::null_mut();
             let hr = (*trigger).QueryInterface(
                 &IDailyTrigger::uuidof(),
                 &mut daily as *mut _ as *mut *mut c_void,
             );
             check_hr!(hr, "failed to query daily trigger");
-            let hr = (*daily).put_DaysInterval(1);
+            // plan.days_interval is 1 for plain daily and minute/hour bases,
+            // or `every` for a day-interval schedule.
+            let hr = (*daily).put_DaysInterval(plan.days_interval as i16);
             (*daily).Release();
             check_hr!(hr, "failed to set daily interval");
         }
-        ScheduleSpec::Weekly { day_of_week, .. } => {
+        TASK_TRIGGER_WEEKLY => {
             let mut weekly: *mut IWeeklyTrigger = ptr::null_mut();
             let hr = (*trigger).QueryInterface(
                 &IWeeklyTrigger::uuidof(),
                 &mut weekly as *mut _ as *mut *mut c_void,
             );
             check_hr!(hr, "failed to query weekly trigger");
-            let day_bit: i16 = 1 << *day_of_week as i16;
+            let day_bit = plan.day_of_week.unwrap_or(1 << 0);
             let hr = (*weekly).put_DaysOfWeek(day_bit);
+            if hr < 0 {
+                (*weekly).Release();
+                return Err(format!("failed to set weekly days: 0x{hr:08x}"));
+            }
+            let hr = (*weekly).put_WeeksInterval(plan.weeks_interval as i16);
             (*weekly).Release();
-            check_hr!(hr, "failed to set weekly days");
+            check_hr!(hr, "failed to set weekly interval");
+        }
+        TASK_TRIGGER_MONTHLY => {
+            let mut monthly: *mut IMonthlyTrigger = ptr::null_mut();
+            let hr = (*trigger).QueryInterface(
+                &IMonthlyTrigger::uuidof(),
+                &mut monthly as *mut _ as *mut *mut c_void,
+            );
+            check_hr!(hr, "failed to query monthly trigger");
+            if let Some(months) = plan.months_of_year {
+                let hr = (*monthly).put_MonthsOfYear(months);
+                if hr < 0 {
+                    (*monthly).Release();
+                    return Err(format!("failed to set months of year: 0x{hr:08x}"));
+                }
+            }
+            if let Some(day) = plan.day_of_month {
+                let hr = (*monthly).put_DaysOfMonth(day);
+                if hr < 0 {
+                    (*monthly).Release();
+                    return Err(format!("failed to set days of month: 0x{hr:08x}"));
+                }
+            }
+            (*monthly).Release();
         }
         _ => {}
     }
@@ -484,12 +691,6 @@ pub fn create_task(spec: &CreateTaskSpec) -> Result<String, String> {
 
     // Trigger.
     let trigger = unsafe { build_trigger(task, &spec.schedule) }?;
-    if let Err(e) = unsafe { set_trigger_specifics(trigger, &spec.schedule) } {
-        unsafe { (*trigger).Release() };
-        unsafe { (*task).Release() };
-        unsafe { (*folder).Release() };
-        return Err(e);
-    }
     unsafe { (*trigger).Release() };
 
     // Action: run the interpreter through cmd.exe (parts built above).
@@ -935,8 +1136,83 @@ mod tests {
             unit: "minutes".to_string(),
         })
         .unwrap();
-        assert_eq!(t, TASK_TRIGGER_REPETITION);
+        assert_eq!(t, TASK_TRIGGER_DAILY);
         assert_eq!(interval, "PT30M");
+    }
+
+    #[test]
+    fn interval_minutes_uses_daily_base_with_repetition() {
+        let plan = trigger_plan(&ScheduleSpec::Interval {
+            start_at: "2026-08-14T08:30:00".to_string(),
+            every: 30,
+            unit: "minutes".to_string(),
+        })
+        .unwrap();
+        assert_eq!(plan.trigger_type, TASK_TRIGGER_DAILY);
+        assert_eq!(plan.repetition_iso.as_deref(), Some("PT30M"));
+        assert_eq!(plan.days_interval, 1);
+    }
+
+    #[test]
+    fn interval_hours_uses_daily_base_with_repetition() {
+        let plan = trigger_plan(&ScheduleSpec::Interval {
+            start_at: "2026-08-14T08:30:00".to_string(),
+            every: 2,
+            unit: "hours".to_string(),
+        })
+        .unwrap();
+        assert_eq!(plan.trigger_type, TASK_TRIGGER_DAILY);
+        assert_eq!(plan.repetition_iso.as_deref(), Some("PT2H"));
+        assert_eq!(plan.days_interval, 1);
+    }
+
+    #[test]
+    fn interval_days_uses_native_daily_interval_without_repetition() {
+        let plan = trigger_plan(&ScheduleSpec::Interval {
+            start_at: "2026-08-14T08:30:00".to_string(),
+            every: 3,
+            unit: "days".to_string(),
+        })
+        .unwrap();
+        assert_eq!(plan.trigger_type, TASK_TRIGGER_DAILY);
+        assert!(plan.repetition_iso.is_none());
+        assert_eq!(plan.days_interval, 3);
+    }
+
+    #[test]
+    fn interval_weeks_uses_native_weekly_interval_without_repetition() {
+        // 2026-08-14 is a Friday (0=Sunday).
+        let plan = trigger_plan(&ScheduleSpec::Interval {
+            start_at: "2026-08-14T08:30:00".to_string(),
+            every: 2,
+            unit: "weeks".to_string(),
+        })
+        .unwrap();
+        assert_eq!(plan.trigger_type, TASK_TRIGGER_WEEKLY);
+        assert!(plan.repetition_iso.is_none());
+        assert_eq!(plan.weeks_interval, 2);
+        assert_eq!(plan.day_of_week, Some(1 << 5)); // Friday
+    }
+
+    #[test]
+    fn interval_months_uses_native_monthly_monthsofyear_without_repetition() {
+        // Start 2026-08-14 -> every 3 months = Aug, Nov, Feb, May.
+        let plan = trigger_plan(&ScheduleSpec::Interval {
+            start_at: "2026-08-14T08:30:00".to_string(),
+            every: 3,
+            unit: "months".to_string(),
+        })
+        .unwrap();
+        assert_eq!(plan.trigger_type, TASK_TRIGGER_MONTHLY);
+        assert!(plan.repetition_iso.is_none());
+        let months = plan.months_of_year.unwrap();
+        // Bitmask: Aug=0x0080, Nov=0x0400, Feb=0x0002, May=0x0010.
+        assert_eq!(months & 0x0080, 0x0080);
+        assert_eq!(months & 0x0400, 0x0400);
+        assert_eq!(months & 0x0002, 0x0002);
+        assert_eq!(months & 0x0010, 0x0010);
+        assert_eq!(months & 0x0001, 0); // January excluded
+        assert_eq!(plan.day_of_month, Some(1 << 13)); // day 14
     }
 
     #[test]
