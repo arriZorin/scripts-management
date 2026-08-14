@@ -15,27 +15,34 @@ export class TaskRunRecorder {
   constructor(private readonly repository: TaskRunRepository) {}
 
   /** Records a running run when a task starts. Never throws. */
-  async recordStart(taskId: string): Promise<void> {
+  async recordStart(taskId: string): Promise<TaskRun> {
     try {
-      await this.repository.append(createTaskRun({ taskId }))
+      const run = createTaskRun({ taskId })
+      await this.repository.append(run)
+      return run
     } catch {
-      // History recording must never break the run flow.
+      return createTaskRun({ taskId })
     }
   }
 
-  /** Records a failed run when the run request itself errors. Never throws. */
-  async recordFailure(taskId: string, message: string): Promise<void> {
+  /**
+   * Finalizes the given running run as failed when the run request itself
+   * errors. Never throws.
+   */
+  async recordFailure(run: TaskRun, message: string): Promise<void> {
     try {
-      const run = createTaskRun({ taskId })
-      await this.repository.append(
-        finalizeTaskRun(run, {
-          finishedAt: new Date().toISOString(),
-          status: 'failed',
-          exitCode: null,
-          stdout: null,
-          stderr: message,
-        }),
-      )
+      const finalized = finalizeTaskRun(run, {
+        finishedAt: new Date().toISOString(),
+        status: 'failed',
+        exitCode: null,
+        stdout: null,
+        stderr: message,
+      })
+      try {
+        await this.repository.update(finalized)
+      } catch {
+        await this.repository.append(finalized)
+      }
     } catch {
       // History recording must never break the run flow.
     }

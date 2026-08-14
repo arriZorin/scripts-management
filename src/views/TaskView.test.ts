@@ -3,6 +3,9 @@ import { describe, expect, it } from 'vitest'
 import TaskView from './TaskView.vue'
 import type { Script } from '../models/Script'
 import type { Task, TaskInput } from '../models/Task'
+import type { TaskRun } from '../models/TaskRun'
+import { TaskRunRecorder } from '../services/TaskRunRecorder'
+import type { TaskRunRepository } from '../services/TaskRunRepository'
 
 class FakeTaskExecutor {
   calls: string[] = []
@@ -49,6 +52,42 @@ class FakeLogger {
   }
 }
 
+class FakeTaskRunRepository implements TaskRunRepository {
+  items: TaskRun[] = []
+
+  async list(): Promise<TaskRun[]> {
+    return [...this.items]
+  }
+
+  async append(run: TaskRun): Promise<void> {
+    this.items.push(run)
+  }
+
+  async update(run: TaskRun): Promise<void> {
+    const index = this.items.findIndex(existing => existing.id === run.id)
+    if (index === -1) throw new Error(`TaskRun with id ${run.id} not found`)
+    this.items[index] = run
+  }
+
+  async clear(): Promise<void> {
+    this.items = []
+  }
+}
+
+function run(overrides: Partial<TaskRun> = {}): TaskRun {
+  return {
+    id: 'run-1',
+    taskId: 'task-1',
+    startedAt: '2026-08-14T08:00:00.000Z',
+    finishedAt: '2026-08-14T08:00:05.000Z',
+    status: 'success',
+    exitCode: 0,
+    stdout: 'hello',
+    stderr: '',
+    ...overrides,
+  }
+}
+
 const script: Script = {
   id: 'script-1',
   name: 'backup.py',
@@ -77,12 +116,20 @@ class FakeTaskRepository {
   async delete(id: string) { this.items = this.items.filter(task => task.id !== id) }
 }
 
-function mountView(repository: FakeTaskRepository, executor = new FakeTaskExecutor(), scheduler = new FakeTaskScheduler(), logger = new FakeLogger()) {
+function mountView(repository: FakeTaskRepository, executor = new FakeTaskExecutor(), scheduler = new FakeTaskScheduler(), logger = new FakeLogger(), runRepository = new FakeTaskRunRepository()) {
   const container = document.createElement('div')
   document.body.appendChild(container)
-  const app = createApp(TaskView, { taskRepository: repository, taskExecutor: executor, taskScheduler: scheduler, logger, scripts: [script] })
+  const app = createApp(TaskView, {
+    taskRepository: repository,
+    taskExecutor: executor,
+    taskScheduler: scheduler,
+    logger,
+    taskRunRepository: runRepository,
+    taskRunRecorder: new TaskRunRecorder(runRepository),
+    scripts: [script],
+  })
   app.mount(container)
-  return { container, app }
+  return { container, app, runRepository }
 }
 
 async function flush() {
@@ -357,5 +404,129 @@ it('logs enable/disable toggles with the new state and duration', async () => {
   expect(logger.records[0].message).toContain('disabled')
   expect(logger.records[0].durationMs).toBeGreaterThanOrEqual(0)
   expect(logger.records[1].message).toContain('enabled')
+  app.unmount()
+})
+
+it('shows an empty execution history panel', async () => {
+  const { container, app } = mountView(new FakeTaskRepository())
+  await flush()
+
+  expect(container.querySelector('[data-testid="runs-empty-state"]')?.textContent).toContain('No runs')
+  expect(container.querySelector('[data-testid="run-filter-all"]')).toBeTruthy()
+  expect(container.querySelector('[data-testid="run-filter-success"]')).toBeTruthy()
+  expect(container.querySelector('[data-testid="run-filter-failed"]')).toBeTruthy()
+  expect(container.querySelector('[data-testid="runs-clear-btn"]')).toBeTruthy()
+  app.unmount()
+})
+
+it('renders run history newest first with status, exit code, and output', async () => {
+  const runRepository = new FakeTaskRunRepository()
+  await runRepository.append(run({ id: 'run-1', startedAt: '2026-08-14T08:00:00.000Z' }))
+  await runRepository.append(run({ id: 'run-2', status: 'failed', exitCode: 2, stderr: 'boom', startedAt: '2026-08-15T08:00:00.000Z' }))
+  await runRepository.append(run({ id: 'run-3', status: 'running', finishedAt: null, startedAt: '2026-08-16T08:00:00.000Z' }))
+  const { container, app } = mountView(new FakeTaskRepository(), new FakeTaskExecutor(), new FakeTaskScheduler(), new FakeLogger(), runRepository)
+  await flush()
+
+  const rows = Array.from(container.querySelectorAll('[data-testid^="run-row-"]'))
+  expect(rows).toHaveLength(3)
+  expect(rows[0]?.getAttribute('data-testid')).toBe('run-row-run-3')
+  expect(rows[1]?.getAttribute('data-testid')).toBe('run-row-run-2')
+  expect(rows[2]?.getAttribute('data-testid')).toBe('run-row-run-1')
+  expect(container.querySelector('[data-testid="run-row-run-2"]')?.textContent).toContain('failed')
+  expect(container.querySelector('[data-testid="run-row-run-2"]')?.textContent).toContain('2')
+  expect(container.querySelector('[data-testid="run-row-run-2"]')?.textContent).toContain('boom')
+  expect(container.querySelector('[data-testid="run-row-run-3"]')?.textContent).toContain('running')
+  app.unmount()
+})
+
+it('filters run history by success and failure', async () => {
+  const runRepository = new FakeTaskRunRepository()
+  await runRepository.append(run({ id: 'run-1', status: 'success' }))
+  await runRepository.append(run({ id: 'run-2', status: 'failed', exitCode: 2, stderr: 'boom' }))
+  const { container, app } = mountView(new FakeTaskRepository(), new FakeTaskExecutor(), new FakeTaskScheduler(), new FakeLogger(), runRepository)
+  await flush()
+
+  ;(container.querySelector('[data-testid="run-filter-failed"]') as HTMLElement).click()
+  await nextTick()
+  let rows = Array.from(container.querySelectorAll('[data-testid^="run-row-"]'))
+  expect(rows).toHaveLength(1)
+  expect(rows[0]?.getAttribute('data-testid')).toBe('run-row-run-2')
+
+  ;(container.querySelector('[data-testid="run-filter-success"]') as HTMLElement).click()
+  await nextTick()
+  rows = Array.from(container.querySelectorAll('[data-testid^="run-row-"]'))
+  expect(rows).toHaveLength(1)
+  expect(rows[0]?.getAttribute('data-testid')).toBe('run-row-run-1')
+
+  ;(container.querySelector('[data-testid="run-filter-all"]') as HTMLElement).click()
+  await nextTick()
+  expect(Array.from(container.querySelectorAll('[data-testid^="run-row-"]'))).toHaveLength(2)
+  app.unmount()
+})
+
+it('clears run history through the confirmation dialog', async () => {
+  const runRepository = new FakeTaskRunRepository()
+  await runRepository.append(run({ id: 'run-1' }))
+  const { container, app } = mountView(new FakeTaskRepository(), new FakeTaskExecutor(), new FakeTaskScheduler(), new FakeLogger(), runRepository)
+  await flush()
+
+  ;(container.querySelector('[data-testid="runs-clear-btn"]') as HTMLElement).click()
+  await nextTick()
+  expect(container.querySelector('[data-testid="runs-clear-dialog"]')).toBeTruthy()
+
+  ;(container.querySelector('[data-testid="confirm-runs-clear-btn"]') as HTMLElement).click()
+  await flush()
+
+  expect(runRepository.items).toHaveLength(0)
+  expect(container.querySelector('[data-testid="runs-empty-state"]')).toBeTruthy()
+  app.unmount()
+})
+
+it('cancelling the clear dialog keeps run history', async () => {
+  const runRepository = new FakeTaskRunRepository()
+  await runRepository.append(run({ id: 'run-1' }))
+  const { container, app } = mountView(new FakeTaskRepository(), new FakeTaskExecutor(), new FakeTaskScheduler(), new FakeLogger(), runRepository)
+  await flush()
+
+  ;(container.querySelector('[data-testid="runs-clear-btn"]') as HTMLElement).click()
+  await nextTick()
+  ;(container.querySelector('[data-testid="cancel-runs-clear-btn"]') as HTMLElement).click()
+  await flush()
+
+  expect(runRepository.items).toHaveLength(1)
+  expect(container.querySelector('[data-testid="runs-clear-dialog"]')).toBeNull()
+  app.unmount()
+})
+
+it('records a running run when Run Now succeeds', async () => {
+  const runRepository = new FakeTaskRunRepository()
+  const repository = new FakeTaskRepository()
+  await repository.create({ name: 'Run me', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', time: '08:00' }, enabled: true })
+  const { container, app } = mountView(repository, new FakeTaskExecutor(), new FakeTaskScheduler(), new FakeLogger(), runRepository)
+  await flush()
+
+  ;(container.querySelector('[data-testid="run-task-task-1"]') as HTMLElement).click()
+  await flush()
+
+  expect(runRepository.items).toHaveLength(1)
+  expect(runRepository.items[0]).toMatchObject({ taskId: 'task-1', status: 'running' })
+  app.unmount()
+})
+
+it('records a failed run when Run Now errors', async () => {
+  const runRepository = new FakeTaskRunRepository()
+  const repository = new FakeTaskRepository()
+  await repository.create({ name: 'Run me', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', time: '08:00' }, enabled: true })
+  const executor = new FakeTaskExecutor()
+  executor.error = 'ERROR: The system cannot find the file specified.'
+  const { container, app } = mountView(repository, executor, new FakeTaskScheduler(), new FakeLogger(), runRepository)
+  await flush()
+
+  ;(container.querySelector('[data-testid="run-task-task-1"]') as HTMLElement).click()
+  await flush()
+
+  expect(runRepository.items).toHaveLength(1)
+  expect(runRepository.items[0]).toMatchObject({ taskId: 'task-1', status: 'failed' })
+  expect(runRepository.items[0].stderr).toContain('The system cannot find the file specified')
   app.unmount()
 })

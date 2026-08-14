@@ -8,6 +8,11 @@ import type { TaskExecutor } from '../services/TaskExecutor'
 import { TauriTaskScheduler } from '../services/TaskScheduler'
 import type { TaskScheduler } from '../services/TaskScheduler'
 import type { AppLogger } from '../services/AppLogger'
+import type { TaskRun, TaskRunStatus } from '../models/TaskRun'
+import type { TaskRunRepository } from '../services/TaskRunRepository'
+import { JsonTaskRunRepository } from '../services/JsonTaskRunRepository'
+import { TaskRunRecorder } from '../services/TaskRunRecorder'
+import { TauriFileStorage } from '../services/TauriFileStorage'
 
 interface Props {
   taskRepository?: TaskRepository
@@ -15,6 +20,8 @@ interface Props {
   taskScheduler?: TaskScheduler
   logger?: AppLogger
   scripts?: Script[]
+  taskRunRepository?: TaskRunRepository
+  taskRunRecorder?: TaskRunRecorder
 }
 
 const props = defineProps<Props>()
@@ -28,6 +35,8 @@ const taskRepository: TaskRepository = props.taskRepository ?? {
 }
 const taskExecutor = props.taskExecutor ?? new TauriTaskExecutor()
 const taskScheduler: TaskScheduler = props.taskScheduler ?? new TauriTaskScheduler()
+const taskRunRepository: TaskRunRepository = props.taskRunRepository ?? new JsonTaskRunRepository(new TauriFileStorage(), 'task-runs.json')
+const taskRunRecorder = props.taskRunRecorder ?? new TaskRunRecorder(taskRunRepository)
 const tasks = ref<Task[]>([])
 const isEditing = ref(false)
 const editingId = ref<string | null>(null)
@@ -37,6 +46,9 @@ const form = ref<TaskInput>(emptyForm())
 const runningTaskId = ref<string | null>(null)
 const operationResult = ref('')
 const operationError = ref('')
+const runs = ref<TaskRun[]>([])
+const runFilter = ref<'all' | 'success' | 'failed'>('all')
+const clearRunsTarget = ref(false)
 
 function emptyForm(): TaskInput {
   return {
@@ -55,6 +67,38 @@ async function load() {
   } catch {
     tasks.value = []
   }
+}
+
+async function loadRuns() {
+  await taskRunRecorder.finalizePending()
+  try {
+    runs.value = await taskRunRepository.list()
+  } catch {
+    runs.value = []
+  }
+}
+
+function filteredRuns(): TaskRun[] {
+  const sorted = [...runs.value].sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))
+  if (runFilter.value === 'success') return sorted.filter(run => run.status === 'success')
+  if (runFilter.value === 'failed') return sorted.filter(run => run.status === 'failed')
+  return sorted
+}
+
+function taskNameOf(taskId: string): string {
+  return tasks.value.find(task => task.id === taskId)?.name ?? taskId
+}
+
+function runStatusBadge(status: TaskRunStatus): string {
+  if (status === 'success') return 'badge-success'
+  if (status === 'failed') return 'badge-error'
+  return 'badge-info'
+}
+
+async function confirmClearRuns() {
+  clearRunsTarget.value = false
+  await taskRunRecorder.clear()
+  await loadRuns()
 }
 
 function openCreate() {
@@ -152,12 +196,15 @@ async function runTask(task: Task) {
   operationResult.value = ''
   operationError.value = ''
   const started = performance.now()
+  const run = await taskRunRecorder.recordStart(task.id)
   try {
     operationResult.value = await taskExecutor.run(task)
     await props.logger?.record('task.run', `run ${task.name}: ${operationResult.value}`, 'info', Math.round(performance.now() - started))
     await load()
+    await loadRuns()
   } catch (cause) {
     operationError.value = errorText(cause, 'Failed to run task.')
+    await taskRunRecorder.recordFailure(run, operationError.value)
     await props.logger?.record('task.run', `run ${task.name} failed: ${operationError.value}`, 'error', Math.round(performance.now() - started))
   } finally {
     runningTaskId.value = null
@@ -199,7 +246,10 @@ function scheduleLabel(schedule: Schedule): string {
   return `Every ${schedule.every} ${schedule.unit}`
 }
 
-onMounted(load)
+onMounted(() => {
+  load()
+  loadRuns()
+})
 </script>
 
 <template>
@@ -234,6 +284,35 @@ onMounted(load)
           </tr>
         </tbody>
       </table>
+
+      <section class="mt-8" data-testid="run-history-panel">
+        <div class="flex flex-row items-center justify-between mb-3">
+          <h2 class="text-lg font-semibold">Execution History</h2>
+          <div class="join">
+            <button class="btn btn-xs join-item" :class="runFilter === 'all' ? 'btn-primary' : ''" data-testid="run-filter-all" @click="runFilter = 'all'">All</button>
+            <button class="btn btn-xs join-item" :class="runFilter === 'success' ? 'btn-primary' : ''" data-testid="run-filter-success" @click="runFilter = 'success'">Success</button>
+            <button class="btn btn-xs join-item" :class="runFilter === 'failed' ? 'btn-primary' : ''" data-testid="run-filter-failed" @click="runFilter = 'failed'">Failed</button>
+          </div>
+          <div class="flex gap-2">
+            <button class="btn btn-xs btn-error" data-testid="runs-clear-btn" @click="clearRunsTarget = true">Clear History</button>
+            <button class="btn btn-xs" data-testid="runs-refresh-btn" @click="loadRuns">Refresh</button>
+          </div>
+        </div>
+        <p v-if="filteredRuns().length === 0" class="alert alert-info" data-testid="runs-empty-state">No runs yet.</p>
+        <table v-else class="table table-zebra w-full" data-testid="runs-table">
+          <thead><tr><th>Task</th><th>Status</th><th>Started</th><th>Finished</th><th>Exit Code</th><th>Output</th></tr></thead>
+          <tbody>
+            <tr v-for="run in filteredRuns()" :key="run.id" :data-testid="`run-row-${run.id}`">
+              <td>{{ taskNameOf(run.taskId) }}</td>
+              <td><span class="badge" :class="runStatusBadge(run.status)">{{ run.status }}</span></td>
+              <td>{{ new Date(run.startedAt).toLocaleString() }}</td>
+              <td>{{ run.finishedAt ? new Date(run.finishedAt).toLocaleString() : '-' }}</td>
+              <td>{{ run.exitCode === null ? '-' : run.exitCode }}</td>
+              <td><span class="whitespace-pre-wrap text-xs">{{ run.stderr || run.stdout || '-' }}</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
     </main>
     <footer class="region footer card p-4 m-2 rounded border border-gray-300 bg-gray-100 mt-4 text-center text-sm text-gray-500 dark:bg-[#2f2f2f] dark:border-[#404040] dark:text-[#999999]"><div class="card-body"><p>&copy; 2026 Scripts Management</p></div></footer>
 
@@ -259,6 +338,10 @@ onMounted(load)
 
     <dialog v-if="deleteTarget" class="modal modal-open" data-testid="task-delete-dialog" role="dialog">
       <div class="modal-box"><h3 class="text-lg font-bold">Delete Task</h3><p class="py-4">Delete {{ deleteTarget.name }}?</p><div class="modal-action"><button class="btn btn-error" data-testid="confirm-task-delete-btn" @click="confirmDelete">Delete</button><button class="btn" data-testid="cancel-task-delete-btn" @click="cancelDelete">Cancel</button></div></div>
+    </dialog>
+
+    <dialog v-if="clearRunsTarget" class="modal modal-open" data-testid="runs-clear-dialog" role="dialog">
+      <div class="modal-box"><h3 class="text-lg font-bold">Clear History</h3><p class="py-4">Remove all execution history?</p><div class="modal-action"><button class="btn btn-error" data-testid="confirm-runs-clear-btn" @click="confirmClearRuns">Clear</button><button class="btn" data-testid="cancel-runs-clear-btn" @click="clearRunsTarget = false">Cancel</button></div></div>
     </dialog>
   </div>
 </template>

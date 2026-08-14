@@ -125,7 +125,8 @@ describe('TaskRunRecorder', () => {
     const repository = new FakeTaskRunRepository()
     const recorder = new TaskRunRecorder(repository)
 
-    await recorder.recordFailure('task-1', 'ERROR: The system cannot find the file specified.')
+    const started = await recorder.recordStart('task-1')
+    await recorder.recordFailure(started, 'ERROR: The system cannot find the file specified.')
 
     expect(repository.items).toHaveLength(1)
     expect(repository.items[0]).toMatchObject({
@@ -144,7 +145,7 @@ describe('TaskRunRecorder', () => {
     mockedInvoke.mockRejectedValue('ipc unavailable')
     const recorder = new TaskRunRecorder(repository)
 
-    await expect(recorder.recordStart('task-1')).resolves.toBeUndefined()
+    await expect(recorder.recordStart('task-1')).resolves.toBeTruthy()
     await expect(recorder.finalizePending()).resolves.toBeUndefined()
   })
 
