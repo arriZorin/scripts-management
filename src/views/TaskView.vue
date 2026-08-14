@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import AlertIcon from '../components/icons/AlertIcon.vue'
+import { useAutoDismiss } from '../composables/useAutoDismiss'
 import type { Script } from '../models/Script'
 import type { Schedule, Task, TaskInput } from '../models/Task'
 import { todayDateString } from '../models/Task'
@@ -53,6 +54,8 @@ const form = ref<TaskInput>(emptyForm())
 const runningTaskId = ref<string | null>(null)
 const operationResult = ref('')
 const operationError = ref('')
+useAutoDismiss(operationResult)
+useAutoDismiss(operationError)
 const runs = ref<TaskRun[]>([])
 const runFilter = ref<'all' | 'success' | 'failed'>('all')
 const clearRunsTarget = ref(false)

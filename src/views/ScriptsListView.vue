@@ -122,6 +122,7 @@
 <script setup lang="ts">
 import { computed, defineComponent, ref } from 'vue';
 import AlertIcon from '../components/icons/AlertIcon.vue';
+import { useAutoDismiss } from '../composables/useAutoDismiss';
 import { useScripts } from '../services/scriptImport/useScripts';
 import { JsonScriptRepository } from '../services/JsonScriptRepository';
 import { JsonTaskRepository } from '../services/JsonTaskRepository';
@@ -164,6 +165,8 @@ const { scripts, error, busy, addScriptFile, addScriptFolder, load } = useScript
 
 const lastResult = ref<{ added: number; skipped: number } | null>(null);
 const operationSummary = ref('');
+useAutoDismiss(error);
+useAutoDismiss(operationSummary);
 const summary = computed(() =>
   operationSummary.value || (lastResult.value ? `Added ${lastResult.value.added} script(s), skipped ${lastResult.value.skipped}.` : '')
 );
