@@ -66,7 +66,7 @@ type Schedule =
       type: 'interval'
       startAt: string // YYYY-MM-DDTHH:mm:00, local Windows time
       every: number
-      unit: 'minutes' | 'hours'
+      unit: 'minutes' | 'hours' | 'days' | 'weeks' | 'months'
     }
 ```
 
@@ -75,7 +75,7 @@ MVP schedule rules:
 - `once`: `runAt` must be a valid future datetime when created.
 - `daily`: runs at the local Windows time in `startAt` every day.
 - `weekly`: runs at the local Windows time in `startAt` on the selected day every week.
-- `interval`: `every` must be a positive integer; supported units are minutes and hours.
+- `interval`: `every` must be a positive integer; supported units are minutes, hours, days, weeks, and months.
 - Schedule calculations use the machine's local Windows timezone.
 - Invalid or past schedule values are rejected before persistence or Windows task creation.
 

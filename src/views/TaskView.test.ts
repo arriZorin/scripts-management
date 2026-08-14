@@ -699,7 +699,9 @@ it('edits interval every and unit', async () => {
   every.value = '30'
   every.dispatchEvent(new Event('input', { bubbles: true }))
   const unit = container.querySelector('[data-testid="interval-unit-select"]') as HTMLSelectElement
-  unit.value = 'minutes'
+  const unitOptions = [...unit.options].map(option => option.value)
+  expect(unitOptions).toEqual(['minutes', 'hours', 'days', 'weeks', 'months'])
+  unit.value = 'days'
   unit.dispatchEvent(new Event('change', { bubbles: true }))
   await nextTick()
 
@@ -713,7 +715,7 @@ it('edits interval every and unit', async () => {
   expect(saved.type).toBe('interval')
   if (saved.type === 'interval') {
     expect(saved.every).toBe(30)
-    expect(saved.unit).toBe('minutes')
+    expect(saved.unit).toBe('days')
   }
   app.unmount()
 })

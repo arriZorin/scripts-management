@@ -168,14 +168,22 @@ fn schedule_args(schedule: &ScheduleSpec) -> Result<Vec<String>, String> {
             ])
         }
         ScheduleSpec::Interval { every, unit, .. } => {
-            if *every == 0 || (unit != "minutes" && unit != "hours") {
+            if *every == 0 {
                 return Err("invalid interval".to_string());
             }
+            let (sc, mo) = match unit.as_str() {
+                "minutes" => ("MINUTE", *every),
+                "hours" => ("HOURLY", *every),
+                "days" => ("DAILY", *every),
+                "weeks" => ("WEEKLY", *every),
+                "months" => ("MONTHLY", *every),
+                _ => return Err("invalid interval".to_string()),
+            };
             Ok(vec![
                 "/SC".to_string(),
-                "MINUTE".to_string(),
+                sc.to_string(),
                 "/MO".to_string(),
-                (if unit == "hours" { every * 60 } else { *every }).to_string(),
+                mo.to_string(),
             ])
         }
     }

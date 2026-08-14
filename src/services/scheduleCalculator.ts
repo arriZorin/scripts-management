@@ -24,10 +24,14 @@ export function calculateNextRun(schedule: Schedule, from: Date): Date {
 
   if (schedule.type === 'interval') {
     if (!Number.isInteger(schedule.every) || schedule.every <= 0) throw new Error('Invalid interval')
-    const milliseconds = schedule.unit === 'hours'
-      ? schedule.every * 60 * 60 * 1000
-      : schedule.every * 60 * 1000
-    return new Date(from.getTime() + milliseconds)
+    const next = new Date(from)
+    const amount = schedule.every
+    if (schedule.unit === 'minutes') next.setMinutes(next.getMinutes() + amount)
+    else if (schedule.unit === 'hours') next.setHours(next.getHours() + amount)
+    else if (schedule.unit === 'days') next.setDate(next.getDate() + amount)
+    else if (schedule.unit === 'weeks') next.setDate(next.getDate() + amount * 7)
+    else next.setMonth(next.getMonth() + amount)
+    return next
   }
 
   const [hours, minutes] = parseTime(startAtTime(schedule.startAt))

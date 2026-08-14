@@ -29,9 +29,12 @@ describe('Task schedule start datetime', () => {
     expect(isValidSchedule({ type: 'daily', startAt: '2026-08-14T08:00:00' })).toBe(true)
     expect(isValidSchedule({ type: 'weekly', startAt: '2026-08-14T08:00:00', dayOfWeek: 1 })).toBe(true)
     expect(isValidSchedule({ type: 'interval', startAt: '2026-08-14T08:00:00', every: 30, unit: 'minutes' })).toBe(true)
+    expect(isValidSchedule({ type: 'interval', startAt: '2026-08-14T08:00:00', every: 2, unit: 'days' })).toBe(true)
+    expect(isValidSchedule({ type: 'interval', startAt: '2026-08-14T08:00:00', every: 1, unit: 'months' })).toBe(true)
     expect(isValidSchedule({ type: 'daily', startAt: 'not-a-datetime' })).toBe(false)
     expect(isValidSchedule({ type: 'weekly', startAt: '2026-13-40T08:00:00', dayOfWeek: 1 })).toBe(false)
     expect(isValidSchedule({ type: 'interval', startAt: '', every: 30, unit: 'minutes' })).toBe(false)
+    expect(isValidSchedule({ type: 'interval', startAt: '2026-08-14T08:00:00', every: 1, unit: 'fortnights' as never })).toBe(false)
   })
 
   it('keeps once schedules valid via their runAt datetime', () => {

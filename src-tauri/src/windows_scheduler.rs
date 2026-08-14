@@ -140,18 +140,20 @@ fn validate_text(value: &str, label: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Repetition interval in ISO 8601 duration minutes for a repetition trigger.
-/// Returns the ISO `PT#M` string or an error for invalid intervals.
+/// Repetition interval in ISO 8601 duration for a repetition trigger.
+/// Returns `PT#M`/`PT#H`/`P#D`/`P#W`/`P#M` or an error for invalid intervals.
 pub fn repetition_interval_iso(every: u32, unit: &str) -> Result<String, String> {
-    if every == 0 || (unit != "minutes" && unit != "hours") {
+    if every == 0 {
         return Err("invalid interval".to_string());
     }
-    let minutes = if unit == "hours" {
-        every.saturating_mul(60)
-    } else {
-        every
-    };
-    Ok(format!("PT{minutes}M"))
+    match unit {
+        "minutes" => Ok(format!("PT{every}M")),
+        "hours" => Ok(format!("PT{every}H")),
+        "days" => Ok(format!("P{every}D")),
+        "weeks" => Ok(format!("P{every}W")),
+        "months" => Ok(format!("P{every}M")),
+        _ => Err("invalid interval".to_string()),
+    }
 }
 
 /// Validates a `YYYY-MM-DDTHH:mm:00` start datetime.
@@ -885,11 +887,14 @@ mod tests {
     }
 
     #[test]
-    fn repetition_interval_converts_units_to_minutes() {
+    fn repetition_interval_converts_units_to_iso() {
         assert_eq!(repetition_interval_iso(5, "minutes").unwrap(), "PT5M");
-        assert_eq!(repetition_interval_iso(2, "hours").unwrap(), "PT120M");
+        assert_eq!(repetition_interval_iso(2, "hours").unwrap(), "PT2H");
+        assert_eq!(repetition_interval_iso(3, "days").unwrap(), "P3D");
+        assert_eq!(repetition_interval_iso(2, "weeks").unwrap(), "P2W");
+        assert_eq!(repetition_interval_iso(1, "months").unwrap(), "P1M");
         assert!(repetition_interval_iso(0, "minutes").is_err());
-        assert!(repetition_interval_iso(1, "days").is_err());
+        assert!(repetition_interval_iso(1, "fortnights").is_err());
     }
 
     #[test]

@@ -45,6 +45,17 @@ describe('calculateNextRun', () => {
       .toEqual(localDate(2026, 8, 13, 12, 0))
   })
 
+  it('calculates the next interval in days, weeks, and months', () => {
+    const from = localDate(2026, 8, 13, 10, 0)
+
+    expect(calculateNextRun({ type: 'interval', startAt: '2026-08-14T08:00:00', every: 3, unit: 'days' }, from))
+      .toEqual(localDate(2026, 8, 16, 10, 0))
+    expect(calculateNextRun({ type: 'interval', startAt: '2026-08-14T08:00:00', every: 2, unit: 'weeks' }, from))
+      .toEqual(localDate(2026, 8, 27, 10, 0))
+    expect(calculateNextRun({ type: 'interval', startAt: '2026-08-14T08:00:00', every: 1, unit: 'months' }, from))
+      .toEqual(localDate(2026, 9, 13, 10, 0))
+  })
+
   it('rejects invalid schedule values', () => {
     const from = localDate(2026, 8, 13, 10, 0)
 

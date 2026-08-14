@@ -3,8 +3,8 @@ import { onMounted, ref } from 'vue'
 import AlertIcon from '../components/icons/AlertIcon.vue'
 import { useAutoDismiss } from '../composables/useAutoDismiss'
 import type { Script } from '../models/Script'
-import type { Schedule, Task, TaskInput } from '../models/Task'
-import { todayDateString } from '../models/Task'
+import type { IntervalUnit, Schedule, Task, TaskInput } from '../models/Task'
+import { INTERVAL_UNITS, todayDateString } from '../models/Task'
 import type { TaskRepository } from '../services/TaskRepository'
 import type { ScriptRepository } from '../services/ScriptRepository'
 import { TauriTaskExecutor } from '../services/TaskExecutor'
@@ -225,10 +225,18 @@ function onEveryChange(event: Event) {
 }
 
 function onUnitChange(event: Event) {
-  const value = (event.target as { value?: string }).value as 'minutes' | 'hours'
+  const value = (event.target as { value?: string }).value as IntervalUnit
   const schedule = form.value.schedule
-  if (schedule.type !== 'interval') return
+  if (schedule.type !== 'interval' || !INTERVAL_UNITS.includes(value)) return
   form.value.schedule = { ...schedule, unit: value }
+}
+
+const intervalUnitLabel: Record<IntervalUnit, string> = {
+  minutes: 'Minutes',
+  hours: 'Hours',
+  days: 'Days',
+  weeks: 'Weeks',
+  months: 'Months',
 }
 
 function onDayOfWeekChange(event: Event) {
@@ -476,8 +484,7 @@ onMounted(() => {
             <div class="flex gap-2">
               <input :value="form.schedule.type === 'interval' ? form.schedule.every : ''" class="input input-bordered w-24" data-testid="interval-every-input" type="number" min="1" @input="onEveryChange" />
               <select :value="form.schedule.type === 'interval' ? form.schedule.unit : 'hours'" class="select select-bordered flex-1" data-testid="interval-unit-select" @change="onUnitChange">
-                <option value="minutes">Minutes</option>
-                <option value="hours">Hours</option>
+                <option v-for="unit in INTERVAL_UNITS" :key="unit" :value="unit">{{ intervalUnitLabel[unit] }}</option>
               </select>
             </div>
           </template>

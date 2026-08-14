@@ -7,11 +7,13 @@ export type TaskStatus =
   | 'disabled'
   | 'error'
 
+export type IntervalUnit = 'minutes' | 'hours' | 'days' | 'weeks' | 'months'
+
 export type Schedule =
   | { type: 'once'; runAt: string }
   | { type: 'daily'; startAt: string }
   | { type: 'weekly'; startAt: string; dayOfWeek: 0 | 1 | 2 | 3 | 4 | 5 | 6 }
-  | { type: 'interval'; startAt: string; every: number; unit: 'minutes' | 'hours' }
+  | { type: 'interval'; startAt: string; every: number; unit: IntervalUnit }
 
 export interface Task {
   id: string
@@ -49,12 +51,14 @@ export function todayDateString(): string {
   return `${year}-${month}-${day}`
 }
 
+export const INTERVAL_UNITS: IntervalUnit[] = ['minutes', 'hours', 'days', 'weeks', 'months']
+
 export function isValidSchedule(schedule: Schedule): boolean {
   if (schedule.type === 'once') return !Number.isNaN(Date.parse(schedule.runAt))
   if (!isValidDateTime(schedule.startAt)) return false
   if (schedule.type === 'daily') return true
   if (schedule.type === 'weekly') return schedule.dayOfWeek >= 0 && schedule.dayOfWeek <= 6
-  return Number.isInteger(schedule.every) && schedule.every > 0 && (schedule.unit === 'minutes' || schedule.unit === 'hours')
+  return Number.isInteger(schedule.every) && schedule.every > 0 && INTERVAL_UNITS.includes(schedule.unit)
 }
 
 export function validateTaskInput(input: TaskInput, scriptExists: boolean): void {
