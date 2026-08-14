@@ -188,6 +188,7 @@ struct SchedulePayload {
     day_of_week: Option<u8>,
     every: Option<u32>,
     unit: Option<String>,
+    start_date: Option<String>,
 }
 
 fn schedule_from_payload(payload: SchedulePayload) -> Result<scheduler::ScheduleSpec, String> {
@@ -196,13 +197,16 @@ fn schedule_from_payload(payload: SchedulePayload) -> Result<scheduler::Schedule
             run_at: payload.value,
         }),
         "daily" => Ok(scheduler::ScheduleSpec::Daily {
+            start_date: payload.start_date.ok_or("start_date is required")?,
             time: payload.value,
         }),
         "weekly" => Ok(scheduler::ScheduleSpec::Weekly {
+            start_date: payload.start_date.ok_or("start_date is required")?,
             day_of_week: payload.day_of_week.ok_or("day_of_week is required")?,
             time: payload.value,
         }),
         "interval" => Ok(scheduler::ScheduleSpec::Interval {
+            start_date: payload.start_date.ok_or("start_date is required")?,
             every: payload.every.ok_or("every is required")?,
             unit: payload.unit.ok_or("unit is required")?,
         }),

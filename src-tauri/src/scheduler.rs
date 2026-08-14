@@ -23,10 +23,23 @@ pub fn execute_command(command: CommandSpec) -> Result<String, String> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ScheduleSpec {
-    Once { run_at: String },
-    Daily { time: String },
-    Weekly { day_of_week: u8, time: String },
-    Interval { every: u32, unit: String },
+    Once {
+        run_at: String,
+    },
+    Daily {
+        start_date: String,
+        time: String,
+    },
+    Weekly {
+        start_date: String,
+        day_of_week: u8,
+        time: String,
+    },
+    Interval {
+        start_date: String,
+        every: u32,
+        unit: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

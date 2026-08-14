@@ -154,6 +154,37 @@ pub fn repetition_interval_iso(every: u32, unit: &str) -> Result<String, String>
     Ok(format!("PT{minutes}M"))
 }
 
+/// Validates a `YYYY-MM-DD` start date.
+pub fn validate_date(value: &str) -> Result<(), String> {
+    validate_text(value, "start_date")?;
+    let parts: Vec<&str> = value.split('-').collect();
+    if parts.len() != 3 {
+        return Err("start_date must use YYYY-MM-DD".to_string());
+    }
+    let year = parts[0]
+        .parse::<u32>()
+        .map_err(|_| "start_date must use YYYY-MM-DD".to_string())?;
+    let month = parts[1]
+        .parse::<u32>()
+        .map_err(|_| "start_date must use YYYY-MM-DD".to_string())?;
+    let day = parts[2]
+        .parse::<u32>()
+        .map_err(|_| "start_date must use YYYY-MM-DD".to_string())?;
+    if !(1..=12).contains(&month) {
+        return Err("start_date must use YYYY-MM-DD".to_string());
+    }
+    let days_in_month = match month {
+        2 if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) => 29,
+        2 => 28,
+        4 | 6 | 9 | 11 => 30,
+        _ => 31,
+    };
+    if day == 0 || day > days_in_month {
+        return Err("start_date must use YYYY-MM-DD".to_string());
+    }
+    Ok(())
+}
+
 /// Trigger type plus start-boundary/interval ISO strings for a schedule.
 /// Kept pure so it is unit-testable without COM.
 pub fn schedule_trigger_parts(schedule: &ScheduleSpec) -> Result<(u32, String, String), String> {
@@ -162,30 +193,41 @@ pub fn schedule_trigger_parts(schedule: &ScheduleSpec) -> Result<(u32, String, S
             validate_text(run_at, "run_at")?;
             Ok((TASK_TRIGGER_TIME, run_at.clone(), String::new()))
         }
-        ScheduleSpec::Daily { time } => {
+        ScheduleSpec::Daily { start_date, time } => {
+            validate_date(start_date)?;
             validate_text(time, "time")?;
             Ok((
                 TASK_TRIGGER_DAILY,
-                format!("2024-01-01T{}:00", time),
+                format!("{}T{}:00", start_date, time),
                 String::new(),
             ))
         }
-        ScheduleSpec::Weekly { day_of_week, time } => {
+        ScheduleSpec::Weekly {
+            start_date,
+            day_of_week,
+            time,
+        } => {
+            validate_date(start_date)?;
             validate_text(time, "time")?;
             if *day_of_week > 6 {
                 return Err("day_of_week must be between 0 and 6".to_string());
             }
             Ok((
                 TASK_TRIGGER_WEEKLY,
-                format!("2024-01-01T{}:00", time),
+                format!("{}T{}:00", start_date, time),
                 String::new(),
             ))
         }
-        ScheduleSpec::Interval { every, unit } => {
+        ScheduleSpec::Interval {
+            start_date,
+            every,
+            unit,
+        } => {
+            validate_date(start_date)?;
             let interval = repetition_interval_iso(*every, unit)?;
             Ok((
                 TASK_TRIGGER_REPETITION,
-                "2024-01-01T00:00:00".to_string(),
+                format!("{}T00:00:00", start_date),
                 interval,
             ))
         }
@@ -291,7 +333,7 @@ unsafe fn build_trigger(
         return Err(e);
     }
 
-    if let ScheduleSpec::Interval { every, unit } = schedule {
+    if let ScheduleSpec::Interval { every, unit, .. } = schedule {
         let interval = repetition_interval_iso(*every, unit)?;
         let interval_wide = wide(&interval);
         let duration_wide = wide("PT0S");
@@ -764,34 +806,53 @@ mod tests {
         assert!(interval.is_empty());
 
         let (t, boundary, interval) = schedule_trigger_parts(&ScheduleSpec::Daily {
+            start_date: "2026-08-14".to_string(),
             time: "08:30".to_string(),
         })
         .unwrap();
         assert_eq!(t, TASK_TRIGGER_DAILY);
-        assert_eq!(boundary, "2024-01-01T08:30:00");
+        assert_eq!(boundary, "2026-08-14T08:30:00");
         assert!(interval.is_empty());
 
         let (t, boundary, _) = schedule_trigger_parts(&ScheduleSpec::Weekly {
+            start_date: "2026-08-14".to_string(),
             day_of_week: 6,
             time: "08:30".to_string(),
         })
         .unwrap();
         assert_eq!(t, TASK_TRIGGER_WEEKLY);
-        assert_eq!(boundary, "2024-01-01T08:30:00");
+        assert_eq!(boundary, "2026-08-14T08:30:00");
 
         assert!(schedule_trigger_parts(&ScheduleSpec::Weekly {
+            start_date: "2026-08-14".to_string(),
             day_of_week: 7,
             time: "08:30".to_string(),
         })
         .is_err());
 
         let (t, _, interval) = schedule_trigger_parts(&ScheduleSpec::Interval {
+            start_date: "2026-08-14".to_string(),
             every: 30,
             unit: "minutes".to_string(),
         })
         .unwrap();
         assert_eq!(t, TASK_TRIGGER_REPETITION);
         assert_eq!(interval, "PT30M");
+    }
+
+    #[test]
+    fn schedule_trigger_parts_rejects_invalid_start_dates() {
+        assert!(schedule_trigger_parts(&ScheduleSpec::Daily {
+            start_date: "not-a-date".to_string(),
+            time: "08:30".to_string(),
+        })
+        .is_err());
+        assert!(schedule_trigger_parts(&ScheduleSpec::Interval {
+            start_date: "2026-13-40".to_string(),
+            every: 30,
+            unit: "minutes".to_string(),
+        })
+        .is_err());
     }
 
     #[test]
@@ -804,6 +865,7 @@ mod tests {
             working_directory: "C:\\Scripts".to_string(),
             log_directory: "C:\\AppData\\logs".to_string(),
             schedule: ScheduleSpec::Daily {
+                start_date: "2026-08-14".to_string(),
                 time: "08:30".to_string(),
             },
         };
