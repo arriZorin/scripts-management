@@ -18,7 +18,7 @@ export interface TaskRunStart {
 export interface TaskRunFinal {
   finishedAt: string
   status: 'success' | 'failed'
-  exitCode: number
+  exitCode: number | null
   stdout: string | null
   stderr: string | null
 }
