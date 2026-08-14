@@ -15,7 +15,6 @@
     "@tauri-apps/plugin-dialog": "^2.7.2",
     "@tauri-apps/plugin-opener": "^2",
     "@vueuse/core": "^14.4.0",
-    "cally": "^0.9.2",
     "vue": "^3.5.13"
   },
   "devDependencies": {

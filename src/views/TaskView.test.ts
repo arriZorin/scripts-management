@@ -538,12 +538,9 @@ it('defaults the schedule start datetime to today when creating a task', async (
   ;(container.querySelector('[data-testid="new-task-btn"]') as HTMLElement).click()
   await nextTick()
 
-  const picker = container.querySelector('[data-testid="start-date-picker"]')
-  expect(picker).toBeTruthy()
-  const trigger = container.querySelector('[data-testid="start-date-trigger"]')
-  expect(trigger?.textContent).toMatch(/^\d{4}-\d{2}-\d{2}$/)
-  const timeInput = container.querySelector('[data-testid="start-time-input"]') as HTMLInputElement
-  expect(timeInput.value).toMatch(/^\d{2}:\d{2}$/)
+  const input = container.querySelector('[data-testid="start-datetime-input"]') as HTMLInputElement
+  expect(input).toBeTruthy()
+  expect(input.value).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/)
 
   const name = container.querySelector('[data-testid="task-name-input"]') as HTMLInputElement
   name.value = 'Start dated task'
@@ -557,21 +554,16 @@ it('defaults the schedule start datetime to today when creating a task', async (
   app.unmount()
 })
 
-it('applies a picked start date and time to the task schedule', async () => {
+it('applies a picked start datetime to the task schedule', async () => {
   const repository = new FakeTaskRepository()
   const { container, app } = mountView(repository)
   await flush()
   ;(container.querySelector('[data-testid="new-task-btn"]') as HTMLElement).click()
   await nextTick()
 
-  const picker = container.querySelector('[data-testid="start-date-picker"]') as HTMLElement
-  ;(picker as { value?: string }).value = '2026-09-01'
-  picker.dispatchEvent(new Event('change', { bubbles: true }))
-  await nextTick()
-
-  const timeInput = container.querySelector('[data-testid="start-time-input"]') as HTMLInputElement
-  timeInput.value = '14:45'
-  timeInput.dispatchEvent(new Event('input', { bubbles: true }))
+  const input = container.querySelector('[data-testid="start-datetime-input"]') as HTMLInputElement
+  input.value = '2026-09-01T14:45'
+  input.dispatchEvent(new Event('input', { bubbles: true }))
   await nextTick()
 
   const name = container.querySelector('[data-testid="task-name-input"]') as HTMLInputElement
