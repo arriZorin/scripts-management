@@ -319,6 +319,18 @@ fn get_scheduled_task_status(task_name: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn list_scheduled_tasks() -> Result<Vec<String>, String> {
+    #[cfg(windows)]
+    {
+        return windows_scheduler::list_scheduled_tasks();
+    }
+    #[cfg(not(windows))]
+    {
+        Ok(Vec::new())
+    }
+}
+
+#[tauri::command]
 fn get_task_run_result(
     state: tauri::State<'_, AppDataDir>,
     task_name: String,
@@ -351,6 +363,7 @@ pub fn run() {
             set_scheduled_task_enabled,
             run_scheduled_task,
             get_scheduled_task_status,
+            list_scheduled_tasks,
             get_task_run_result,
             resolve_interpreter_path,
             get_log_directory,

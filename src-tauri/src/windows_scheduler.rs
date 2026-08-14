@@ -11,18 +11,18 @@ use std::ptr;
 
 use winapi::ctypes::c_void;
 use winapi::shared::winerror::RPC_E_CHANGED_MODE;
-use winapi::shared::wtypes::DATE;
+use winapi::shared::wtypes::{BSTR, DATE, VT_I4};
 use winapi::um::combaseapi::{CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL};
 use winapi::um::oaidl::VARIANT;
 use winapi::um::objbase::COINIT_APARTMENTTHREADED;
-use winapi::um::oleauto::VariantInit;
+use winapi::um::oleauto::{SysFreeString, SysStringLen, VariantInit};
 use winapi::um::taskschd::{
-    IAction, IActionCollection, IDailyTrigger, IExecAction, IRegisteredTask, IRegistrationInfo,
-    IRepetitionPattern, ITaskDefinition, ITaskFolder, ITaskService, ITaskSettings, ITrigger,
-    ITriggerCollection, IWeeklyTrigger, TaskScheduler, TASK_ACTION_EXEC, TASK_CREATE_OR_UPDATE,
-    TASK_LOGON_INTERACTIVE_TOKEN, TASK_STATE_DISABLED, TASK_STATE_QUEUED, TASK_STATE_READY,
-    TASK_STATE_RUNNING, TASK_STATE_UNKNOWN, TASK_TRIGGER_DAILY, TASK_TRIGGER_TIME,
-    TASK_TRIGGER_WEEKLY,
+    IAction, IActionCollection, IDailyTrigger, IExecAction, IRegisteredTask,
+    IRegisteredTaskCollection, IRegistrationInfo, IRepetitionPattern, ITaskDefinition, ITaskFolder,
+    ITaskService, ITaskSettings, ITrigger, ITriggerCollection, IWeeklyTrigger, TaskScheduler,
+    TASK_ACTION_EXEC, TASK_CREATE_OR_UPDATE, TASK_LOGON_INTERACTIVE_TOKEN, TASK_STATE_DISABLED,
+    TASK_STATE_QUEUED, TASK_STATE_READY, TASK_STATE_RUNNING, TASK_STATE_UNKNOWN,
+    TASK_TRIGGER_DAILY, TASK_TRIGGER_TIME, TASK_TRIGGER_WEEKLY,
 };
 use winapi::um::winnt::LONG;
 use winapi::{Class, Interface};
@@ -611,6 +611,71 @@ pub fn run_task(task_name: &str) -> Result<String, String> {
     Ok(format!("started {}", task_name))
 }
 
+/// Keeps only task names under the app's `ScriptsManagement\` namespace.
+/// COM returns full paths (possibly with a leading `\`), so the prefix is
+/// matched after trimming separators. Pure so it is unit-testable.
+pub fn managed_task_names(names: Vec<String>) -> Vec<String> {
+    names
+        .into_iter()
+        .map(|name| name.trim_start_matches('\\').to_string())
+        .filter(|name| name.starts_with("ScriptsManagement\\"))
+        .collect()
+}
+
+/// Lists the names of all registered tasks in the app's namespace through
+/// the native Task Scheduler API. Used by the frontend to reconcile JSON
+/// tasks with their Windows registrations.
+pub fn list_scheduled_tasks() -> Result<Vec<String>, String> {
+    let connection = connect()?;
+    let folder = root_folder(&connection)?;
+
+    let mut collection: *mut IRegisteredTaskCollection = ptr::null_mut();
+    let hr = unsafe { (*folder).GetTasks(0, &mut collection) };
+    unsafe { (*folder).Release() };
+    check_hr!(hr, "failed to enumerate scheduled tasks");
+
+    let mut count: LONG = 0;
+    let hr = unsafe { (*collection).get_Count(&mut count) };
+    if hr < 0 {
+        unsafe { (*collection).Release() };
+        return Err(format!("failed to count scheduled tasks: 0x{hr:08x}"));
+    }
+
+    let mut names = Vec::new();
+    for index in 1..=count {
+        let mut item: VARIANT = unsafe { std::mem::zeroed() };
+        unsafe {
+            item.n1.n2_mut().vt = VT_I4 as u16;
+            *item.n1.n2_mut().n3.lVal_mut() = index;
+        }
+
+        let mut registered: *mut IRegisteredTask = ptr::null_mut();
+        let hr = unsafe { (*collection).get_Item(item, &mut registered) };
+        if hr < 0 {
+            continue;
+        }
+        let mut name: BSTR = ptr::null_mut();
+        let hr = unsafe { (*registered).get_Name(&mut name) };
+        unsafe { (*registered).Release() };
+        if hr >= 0 && !name.is_null() {
+            names.push(bstr_to_string(name));
+        }
+    }
+    unsafe { (*collection).Release() };
+
+    Ok(managed_task_names(names))
+}
+
+fn bstr_to_string(value: BSTR) -> String {
+    unsafe {
+        let len = SysStringLen(value) as usize;
+        let slice = std::slice::from_raw_parts(value, len);
+        let text = String::from_utf16_lossy(slice);
+        SysFreeString(value);
+        text
+    }
+}
+
 /// Maps a `TASK_STATE` value to its stable name. Pure so it is unit-testable.
 pub fn task_state_name(state: u32) -> &'static str {
     match state {
@@ -885,6 +950,26 @@ mod tests {
             validate_text(argument, "argument").unwrap();
         }
         assert!(validate_text("bad&arg", "argument").is_err());
+    }
+
+    #[test]
+    fn managed_task_names_filters_to_scripts_management_prefix() {
+        let names = managed_task_names(vec![
+            "ScriptsManagement\\task-1".to_string(),
+            "ScriptsManagement\\task-2".to_string(),
+            "\\ScriptsManagement\\task-3".to_string(),
+            "Other\\task".to_string(),
+            "Windows\\Update".to_string(),
+        ]);
+        assert_eq!(
+            names,
+            vec![
+                "ScriptsManagement\\task-1".to_string(),
+                "ScriptsManagement\\task-2".to_string(),
+                "ScriptsManagement\\task-3".to_string(),
+            ]
+        );
+        assert!(managed_task_names(vec![]).is_empty());
     }
 
     #[test]

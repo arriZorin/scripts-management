@@ -336,14 +336,21 @@ onMounted(() => {
         </div>
         <p v-if="filteredRuns().length === 0" class="alert alert-info" data-testid="runs-empty-state">No runs yet.</p>
         <table v-else class="table table-zebra w-full" data-testid="runs-table">
-          <thead><tr><th>Task</th><th>Status</th><th>Started</th><th>Finished</th><th>Exit Code</th><th>Output</th></tr></thead>
+          <thead>
+            <tr>
+              <th>Task</th>
+              <th>Status</th>
+              <th>Started</th>
+              <th>Finished</th>
+              <th>Output</th>
+            </tr>
+          </thead>
           <tbody>
             <tr v-for="run in filteredRuns()" :key="run.id" :data-testid="`run-row-${run.id}`">
               <td>{{ taskNameOf(run.taskId) }}</td>
               <td><span class="badge" :class="runStatusBadge(run.status)">{{ run.status }}</span></td>
               <td>{{ new Date(run.startedAt).toLocaleString() }}</td>
               <td>{{ run.finishedAt ? new Date(run.finishedAt).toLocaleString() : '-' }}</td>
-              <td>{{ run.exitCode === null ? '-' : run.exitCode }}</td>
               <td><span class="whitespace-pre-wrap text-xs">{{ runOutput(run) }}</span></td>
             </tr>
           </tbody>
