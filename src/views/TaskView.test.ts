@@ -116,7 +116,13 @@ class FakeTaskRepository {
   async delete(id: string) { this.items = this.items.filter(task => task.id !== id) }
 }
 
-function mountView(repository: FakeTaskRepository, executor = new FakeTaskExecutor(), scheduler = new FakeTaskScheduler(), logger = new FakeLogger(), runRepository = new FakeTaskRunRepository()) {
+class FakeScriptRepository {
+  items: Script[] = [script]
+
+  async list() { return [...this.items] }
+}
+
+function mountView(repository: FakeTaskRepository, executor = new FakeTaskExecutor(), scheduler = new FakeTaskScheduler(), logger = new FakeLogger(), runRepository = new FakeTaskRunRepository(), scriptRepository: FakeScriptRepository | null = null) {
   const container = document.createElement('div')
   document.body.appendChild(container)
   const app = createApp(TaskView, {
@@ -127,6 +133,7 @@ function mountView(repository: FakeTaskRepository, executor = new FakeTaskExecut
     taskRunRepository: runRepository,
     taskRunRecorder: new TaskRunRecorder(runRepository),
     scripts: [script],
+    scriptRepository: scriptRepository ?? undefined,
   })
   app.mount(container)
   return { container, app, runRepository }
@@ -146,7 +153,7 @@ describe('TaskView', () => {
 
     expect(container.querySelector('[data-testid="task-empty-state"]')?.textContent).toContain('No tasks')
     ;(container.querySelector('[data-testid="new-task-btn"]') as HTMLElement).click()
-    await nextTick()
+    await flush()
 
     expect(container.querySelector('[data-testid="task-dialog"]')).toBeTruthy()
     expect(container.querySelector('[data-testid="script-select"]')).toBeTruthy()
@@ -163,7 +170,7 @@ describe('TaskView', () => {
     const { container, app } = mountView(repository)
     await flush()
     ;(container.querySelector('[data-testid="new-task-btn"]') as HTMLElement).click()
-    await nextTick()
+    await flush()
 
     const name = container.querySelector('[data-testid="task-name-input"]') as HTMLInputElement
     name.value = 'Daily backup'
@@ -183,7 +190,7 @@ describe('TaskView', () => {
     const { container, app } = mountView(repository, new FakeTaskExecutor(), new FakeTaskScheduler(), logger)
     await flush()
     ;(container.querySelector('[data-testid="new-task-btn"]') as HTMLElement).click()
-    await nextTick()
+    await flush()
 
     const name = container.querySelector('[data-testid="task-name-input"]') as HTMLInputElement
     name.value = 'Logged task'
@@ -206,13 +213,46 @@ describe('TaskView', () => {
     const { container, app } = mountView(repository, new FakeTaskExecutor(), new FakeTaskScheduler(), logger)
     await flush()
     ;(container.querySelector('[data-testid="new-task-btn"]') as HTMLElement).click()
-    await nextTick()
+    await flush()
     ;(container.querySelector('[data-testid="save-task-btn"]') as HTMLElement).click()
     await flush()
 
     expect(logger.records[0].source).toBe('task.create')
     expect(logger.records[0].level).toBe('error')
     expect(logger.records[0].message).toContain('Task name is required')
+    app.unmount()
+  })
+
+  it('refreshes the script list from the repository when opening the new task dialog', async () => {
+    const repository = new FakeTaskRepository()
+    const scriptRepository = new FakeScriptRepository()
+    const { container, app } = mountView(repository, new FakeTaskExecutor(), new FakeTaskScheduler(), new FakeLogger(), new FakeTaskRunRepository(), scriptRepository)
+    await flush()
+
+    scriptRepository.items.push({ id: 'script-2', name: 'nightly.py', path: 'C:/scripts/nightly.py', type: 'python', createdAt: '2024-01-01T00:00:00.000Z', updatedAt: '2024-01-01T00:00:00.000Z' })
+
+    ;(container.querySelector('[data-testid="new-task-btn"]') as HTMLElement).click()
+    await flush()
+
+    const options = [...container.querySelectorAll('[data-testid="script-select"] option')].map(option => option.textContent)
+    expect(options).toContain('nightly.py')
+    app.unmount()
+  })
+
+  it('refreshes the script list from the repository when opening the edit dialog', async () => {
+    const repository = new FakeTaskRepository()
+    await repository.create({ name: 'Existing', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', startAt: '2026-08-14T08:00:00' }, enabled: true })
+    const scriptRepository = new FakeScriptRepository()
+    const { container, app } = mountView(repository, new FakeTaskExecutor(), new FakeTaskScheduler(), new FakeLogger(), new FakeTaskRunRepository(), scriptRepository)
+    await flush()
+
+    scriptRepository.items.push({ id: 'script-2', name: 'nightly.py', path: 'C:/scripts/nightly.py', type: 'python', createdAt: '2024-01-01T00:00:00.000Z', updatedAt: '2024-01-01T00:00:00.000Z' })
+
+    ;(container.querySelector('[data-testid="edit-task-task-1"]') as HTMLElement).click()
+    await flush()
+
+    const options = [...container.querySelectorAll('[data-testid="script-select"] option')].map(option => option.textContent)
+    expect(options).toContain('nightly.py')
     app.unmount()
   })
 })
@@ -224,7 +264,7 @@ it('edits, toggles, and deletes a task through row actions', async () => {
   await flush()
 
   ;(container.querySelector('[data-testid="edit-task-task-1"]') as HTMLElement).click()
-  await nextTick()
+  await flush()
   const name = container.querySelector('[data-testid="task-name-input"]') as HTMLInputElement
   name.value = 'Updated'
   name.dispatchEvent(new Event('input', { bubbles: true }))
@@ -280,7 +320,7 @@ it('registers a new task with the scheduler after saving', async () => {
   const { container, app } = mountView(repository, new FakeTaskExecutor(), scheduler)
   await flush()
   ;(container.querySelector('[data-testid="new-task-btn"]') as HTMLElement).click()
-  await nextTick()
+  await flush()
 
   const name = container.querySelector('[data-testid="task-name-input"]') as HTMLInputElement
   name.value = 'Daily backup'
@@ -302,7 +342,7 @@ it('resyncs the scheduler when editing a task', async () => {
   await flush()
 
   ;(container.querySelector('[data-testid="edit-task-task-1"]') as HTMLElement).click()
-  await nextTick()
+  await flush()
   const name = container.querySelector('[data-testid="task-name-input"]') as HTMLInputElement
   name.value = 'Updated'
   name.dispatchEvent(new Event('input', { bubbles: true }))
@@ -536,7 +576,7 @@ it('defaults the schedule start datetime to today when creating a task', async (
   const { container, app } = mountView(repository)
   await flush()
   ;(container.querySelector('[data-testid="new-task-btn"]') as HTMLElement).click()
-  await nextTick()
+  await flush()
 
   const input = container.querySelector('[data-testid="start-datetime-input"]') as HTMLInputElement
   expect(input).toBeTruthy()
@@ -559,7 +599,7 @@ it('applies a picked start datetime to the task schedule', async () => {
   const { container, app } = mountView(repository)
   await flush()
   ;(container.querySelector('[data-testid="new-task-btn"]') as HTMLElement).click()
-  await nextTick()
+  await flush()
 
   const input = container.querySelector('[data-testid="start-datetime-input"]') as HTMLInputElement
   input.value = '2026-09-01T14:45'

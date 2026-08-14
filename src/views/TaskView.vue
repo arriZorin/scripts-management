@@ -4,6 +4,7 @@ import type { Script } from '../models/Script'
 import type { Schedule, Task, TaskInput } from '../models/Task'
 import { todayDateString } from '../models/Task'
 import type { TaskRepository } from '../services/TaskRepository'
+import type { ScriptRepository } from '../services/ScriptRepository'
 import { TauriTaskExecutor } from '../services/TaskExecutor'
 import type { TaskExecutor } from '../services/TaskExecutor'
 import { TauriTaskScheduler } from '../services/TaskScheduler'
@@ -21,12 +22,14 @@ interface Props {
   taskScheduler?: TaskScheduler
   logger?: AppLogger
   scripts?: Script[]
+  scriptRepository?: ScriptRepository
   taskRunRepository?: TaskRunRepository
   taskRunRecorder?: TaskRunRecorder
 }
 
 const props = defineProps<Props>()
-const scripts = props.scripts ?? []
+const scripts = ref<Script[]>(props.scripts ?? [])
+const scriptRepository = props.scriptRepository
 const taskRepository: TaskRepository = props.taskRepository ?? {
   list: async () => [],
   get: async () => null,
@@ -51,10 +54,19 @@ const runs = ref<TaskRun[]>([])
 const runFilter = ref<'all' | 'success' | 'failed'>('all')
 const clearRunsTarget = ref(false)
 
+async function loadScripts() {
+  if (!scriptRepository) return
+  try {
+    scripts.value = await scriptRepository.list()
+  } catch {
+    scripts.value = []
+  }
+}
+
 function emptyForm(): TaskInput {
   return {
     name: '',
-    scriptId: scripts[0]?.id ?? '',
+    scriptId: scripts.value[0]?.id ?? '',
     interpreter: 'python',
     arguments: [],
     schedule: { type: 'daily', startAt: `${todayDateString()}T08:00:00` },
@@ -102,15 +114,17 @@ async function confirmClearRuns() {
   await loadRuns()
 }
 
-function openCreate() {
+async function openCreate() {
   editingId.value = null
+  await loadScripts()
   form.value = emptyForm()
   error.value = ''
   isEditing.value = true
 }
 
-function openEdit(task: Task) {
+async function openEdit(task: Task) {
   editingId.value = task.id
+  await loadScripts()
   form.value = {
     name: task.name,
     scriptId: task.scriptId,
@@ -157,7 +171,7 @@ async function save() {
     if (!form.value.name.trim()) throw new Error('Task name is required')
     if (!form.value.scriptId) throw new Error('Script is required')
     if (!form.value.interpreter.trim()) throw new Error('Python interpreter is required')
-    const script = scripts.find(script => script.id === form.value.scriptId)
+    const script = scripts.value.find(script => script.id === form.value.scriptId)
     if (!script) throw new Error('Script is required')
     let task: Task
     if (editingId.value) {

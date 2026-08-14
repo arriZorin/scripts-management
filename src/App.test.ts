@@ -335,6 +335,8 @@ describe('App', () => {
     const newTaskBtn = container.querySelector('[data-testid="new-task-btn"]') as HTMLElement;
     newTaskBtn.click();
     await nextTick();
+    await Promise.resolve();
+    await nextTick();
 
     const options = Array.from(container.querySelectorAll('[data-testid="script-select"] option'));
     expect(options.map(option => option.textContent?.trim())).toContain('backup.py');
