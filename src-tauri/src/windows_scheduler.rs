@@ -827,4 +827,81 @@ mod tests {
         assert_eq!(task_state_name(TASK_STATE_RUNNING), "running");
         assert_eq!(task_state_name(999), "unknown");
     }
+
+    /// Real Task Scheduler integration: creates a task through the production
+    /// COM path, verifies the battery setting is disabled (otherwise the task
+    /// stays Queued forever on laptops running on battery), runs it, and
+    /// asserts the redirected stdout log is actually written. Gated with
+    /// `#[ignore]` because it registers and runs a real scheduled task; run
+    /// explicitly with `cargo test -- --ignored`.
+    #[test]
+    #[ignore]
+    fn battery_task_executes_and_writes_stdout_log() {
+        let task_name = "ScriptsManagement\\p6-battery-probe";
+        let log_dir = std::env::temp_dir().join("p6-battery-probe-logs");
+        std::fs::create_dir_all(&log_dir).unwrap();
+        let _ = delete_task(task_name); // clean any previous probe
+
+        // A real python interpreter + a tiny script, mirroring production.
+        let entries: Vec<String> = std::env::var("PATH")
+            .unwrap_or_default()
+            .split(';')
+            .map(str::to_string)
+            .collect();
+        let python = crate::find_in_path("python", &entries)
+            .expect("python must be on PATH for this integration test");
+        let script = log_dir.join("probe.py");
+        std::fs::write(&script, "print('battery-probe-marker')\n").unwrap();
+
+        let spec = CreateTaskSpec {
+            task_name: task_name.to_string(),
+            interpreter: python,
+            script_path: script.to_string_lossy().to_string(),
+            arguments: vec![],
+            working_directory: log_dir.to_string_lossy().to_string(),
+            log_directory: log_dir.to_string_lossy().to_string(),
+            schedule: ScheduleSpec::Once {
+                run_at: "2099-01-01T00:00:00".to_string(),
+            },
+        };
+        create_task(&spec).unwrap();
+
+        // The exported XML must not contain the battery-start restriction.
+        let xml = std::process::Command::new("schtasks.exe")
+            .args(["/Query", "/TN", task_name, "/XML"])
+            .output()
+            .unwrap();
+        let xml_text = String::from_utf8_lossy(&xml.stdout).to_string();
+        assert!(
+            !xml_text.contains("DisallowStartIfOnBatteries>true"),
+            "task must be allowed to start on battery, XML: {}",
+            xml_text
+        );
+
+        // Running it must actually execute and write the stdout log.
+        run_task(task_name).unwrap();
+        let stem = log_file_stem(task_name);
+        let stdout_log = log_dir.join(format!("{}.out.log", stem));
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+        let mut content = String::new();
+        while std::time::Instant::now() < deadline {
+            if let Ok(text) = std::fs::read_to_string(&stdout_log) {
+                // cmd creates the redirect file empty before python writes,
+                // so keep polling until the marker actually appears.
+                if text.contains("battery-probe-marker") {
+                    content = text;
+                    break;
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
+        assert!(
+            content.contains("battery-probe-marker"),
+            "stdout log missing marker, content: {:?}",
+            content
+        );
+
+        let _ = delete_task(task_name);
+        let _ = std::fs::remove_dir_all(&log_dir);
+    }
 }
