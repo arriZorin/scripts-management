@@ -163,13 +163,10 @@ const taskScheduler = props.taskScheduler ?? new TauriTaskScheduler();
 
 const { scripts, error, busy, addScriptFile, addScriptFolder, load } = useScripts({ repository, picker, scanner });
 
-const lastResult = ref<{ added: number; skipped: number } | null>(null);
 const operationSummary = ref('');
 useAutoDismiss(error);
 useAutoDismiss(operationSummary);
-const summary = computed(() =>
-  operationSummary.value || (lastResult.value ? `Added ${lastResult.value.added} script(s), skipped ${lastResult.value.skipped}.` : '')
-);
+const summary = computed(() => operationSummary.value);
 
 // Edit state and refs
 const selectedScript = ref<Script | null>(null);
@@ -272,11 +269,13 @@ async function confirmDelete() {
 }
 
 async function handleAddFile() {
-  lastResult.value = await addScriptFile();
+  const result = await addScriptFile();
+  operationSummary.value = `Added ${result.added} script(s), skipped ${result.skipped}.`;
 }
 
 async function handleAddFolder() {
-  lastResult.value = await addScriptFolder();
+  const result = await addScriptFolder();
+  operationSummary.value = `Added ${result.added} script(s), skipped ${result.skipped}.`;
 }
 
 async function handleRefresh() {

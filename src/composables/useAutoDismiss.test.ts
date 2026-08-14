@@ -11,12 +11,12 @@ describe('useAutoDismiss', () => {
     vi.useRealTimers()
   })
 
-  it('clears the ref to null after 5 seconds', async () => {
+  it('clears the ref to null after 3 seconds', async () => {
     const source = ref('hello')
     useAutoDismiss(source)
     await nextTick()
 
-    vi.advanceTimersByTime(4999)
+    vi.advanceTimersByTime(2999)
     expect(source.value).toBe('hello')
 
     vi.advanceTimersByTime(1)
@@ -42,7 +42,7 @@ describe('useAutoDismiss', () => {
     await nextTick()
     expect(source.value).toBe('second')
 
-    vi.advanceTimersByTime(4999)
+    vi.advanceTimersByTime(2999)
     expect(source.value).toBe('second')
 
     vi.advanceTimersByTime(1)

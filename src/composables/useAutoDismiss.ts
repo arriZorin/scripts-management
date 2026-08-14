@@ -5,7 +5,7 @@ import { watch, type Ref } from 'vue'
  * timer whenever it is set again. Used for transient feedback alerts that
  * should auto-dismiss (e.g. success/error banners) rather than persist.
  */
-export function useAutoDismiss(source: Ref<string | null>, timeoutMs = 5000) {
+export function useAutoDismiss(source: Ref<string | null>, timeoutMs = 3000) {
   let timer: ReturnType<typeof setTimeout> | null = null
 
   watch(source, (value) => {
