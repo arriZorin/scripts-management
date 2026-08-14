@@ -259,6 +259,7 @@ Implementation notes:
 - [ ] Detect missing Windows tasks
 - [ ] Detect orphaned Windows tasks
 - [ ] Add Repair task action
+- [x] Cascade delete: deleting a script warns about linked tasks and removes them (JSON + Windows registration) first — no orphaned Windows tasks for deleted scripts
 - [ ] Handle app closed/restarted scenarios
 - [ ] Handle machine restart
 - [ ] Handle deleted/moved scripts

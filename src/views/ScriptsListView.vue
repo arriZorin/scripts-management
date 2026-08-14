@@ -82,13 +82,22 @@
         <div class="modal-box p-4 max-w-md">
           <h3 class="text-lg font-bold mb-2">Delete Script</h3>
           <p class="text-gray-600 mb-4">Are you sure you want to delete <strong>{{ deleteTarget.name }}</strong>?</p>
+          <div v-if="linkedTasks.length > 0" class="alert alert-warning mb-4" data-testid="linked-tasks-warning">
+            <div>
+              <strong>{{ linkedTasks.length }} linked task(s) will also be deleted:</strong>
+              <ul class="list-disc list-inside mt-1">
+                <li v-for="task in linkedTasks" :key="task.id">{{ task.name }}</li>
+              </ul>
+            </div>
+          </div>
+          <p v-if="deleteError" class="alert alert-error mb-4" data-testid="delete-error">{{ deleteError }}</p>
           <div class="flex justify-between items-center">
             <div class="text-sm text-gray-500">
               <div class="mb-1">Path: <span class="script-name">{{ deleteTarget.path }}</span></div>
               <div>Type: <span class="script-name">{{ deleteTarget.type }}</span></div>
             </div>
             <div class="flex gap-2">
-              <button @click="confirmDelete" data-testid="confirm-delete-btn" class="btn btn-error btn-sm">Delete</button>
+              <button @click="confirmDelete" data-testid="confirm-delete-btn" class="btn btn-error btn-sm">{{ linkedTasks.length > 0 ? 'Delete script & tasks' : 'Delete' }}</button>
               <button @click="cancelDelete" data-testid="cancel-delete-btn" class="btn btn-ghost btn-sm">Cancel</button>
             </div>
           </div>
@@ -113,11 +122,14 @@
 import { computed, defineComponent, ref } from 'vue';
 import { useScripts } from '../services/scriptImport/useScripts';
 import { JsonScriptRepository } from '../services/JsonScriptRepository';
+import { JsonTaskRepository } from '../services/JsonTaskRepository';
+import { TauriTaskScheduler } from '../services/TaskScheduler';
 import { TauriFileStorage } from '../services/TauriFileStorage';
 import { TauriScriptPicker } from '../services/scriptImport/ScriptPicker';
 import { TauriFileScanner } from '../services/scriptImport/FileScanner';
 import { onMounted } from 'vue';
 import type { Script } from '../models/Script';
+import type { Task } from '../models/Task';
 import { useTimeAgo } from '@vueuse/core';
 
 const RelativeTime = defineComponent({
@@ -134,6 +146,8 @@ interface Props {
   repository?: import('../services/ScriptRepository').ScriptRepository;
   picker?: import('../services/scriptImport/ScriptPicker').ScriptPicker;
   scanner?: import('../services/scriptImport/FileScanner').FileScanner;
+  taskRepository?: import('../services/TaskRepository').TaskRepository;
+  taskScheduler?: import('../services/TaskScheduler').TaskScheduler;
 }
 
 const props = defineProps<Props>();
@@ -141,6 +155,8 @@ const props = defineProps<Props>();
 const repository = props.repository ?? new JsonScriptRepository(new TauriFileStorage(), 'scripts.json');
 const picker = props.picker ?? new TauriScriptPicker();
 const scanner = props.scanner ?? new TauriFileScanner();
+const taskRepository = props.taskRepository ?? new JsonTaskRepository(new TauriFileStorage(), 'tasks.json', repository);
+const taskScheduler = props.taskScheduler ?? new TauriTaskScheduler();
 
 const { scripts, error, busy, addScriptFile, addScriptFolder, load } = useScripts({ repository, picker, scanner });
 
@@ -159,6 +175,8 @@ const editError = ref<string | null>(null);
 
 // Delete state
 const deleteTarget = ref<Script | null>(null);
+const linkedTasks = ref<Task[]>([]);
+const deleteError = ref('');
 
 // Edit dialog handlers
 function openEditDialog(script: Script) {
@@ -204,12 +222,22 @@ async function saveEdit() {
 async function handleDelete(script: Script) {
   if (!script) return;
 
-  // Check user confirmation BEFORE deleting
+  deleteError.value = '';
+  // Collect tasks that reference this script so the dialog can warn and
+  // cascade deletion of the linked Windows tasks.
+  try {
+    const tasks = await taskRepository.list();
+    linkedTasks.value = tasks.filter(task => task.scriptId === script.id);
+  } catch {
+    linkedTasks.value = [];
+  }
   deleteTarget.value = script;
 }
 
 function cancelDelete() {
   deleteTarget.value = null;
+  linkedTasks.value = [];
+  deleteError.value = '';
 }
 
 async function confirmDelete() {
@@ -217,14 +245,24 @@ async function confirmDelete() {
   if (!target) return;
 
   try {
+    // Cascade: remove linked tasks (JSON + Windows registration) first so no
+    // orphaned Windows task keeps running a deleted script, then the script.
+    for (const task of linkedTasks.value) {
+      await taskRepository.delete(task.id);
+      await taskScheduler.delete(task.id);
+    }
     await repository.delete(target.id);
     await load();
 
-    operationSummary.value = `Deleted ${target.name}.`;
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Failed to delete script.';
-  } finally {
+    operationSummary.value = linkedTasks.value.length > 0
+      ? `Deleted ${target.name} and ${linkedTasks.value.length} linked task(s).`
+      : `Deleted ${target.name}.`;
     deleteTarget.value = null;
+    linkedTasks.value = [];
+    deleteError.value = '';
+  } catch (e) {
+    // Keep the dialog open so the error is visible; nothing was committed.
+    deleteError.value = typeof e === 'string' && e.trim() ? e : e instanceof Error ? e.message : 'Failed to delete script.';
   }
 }
 

@@ -65,12 +65,36 @@ class FakeFileScanner {
   }
 }
 
-function mountView(repo: FakeScriptRepository, picker: FakeScriptPicker, scanner: FakeFileScanner) {
+class FakeTaskRepository {
+  public items: any[] = []
+
+  list(): Promise<any[]> {
+    return Promise.resolve([...this.items])
+  }
+
+  delete(id: string): Promise<void> {
+    this.items = this.items.filter((t) => t.id !== id)
+    return Promise.resolve()
+  }
+}
+
+class FakeTaskScheduler {
+  public deletes: string[] = []
+  public error: unknown = null
+
+  delete(id: string): Promise<void> {
+    if (this.error) return Promise.reject(this.error)
+    this.deletes.push(id)
+    return Promise.resolve()
+  }
+}
+
+function mountView(repo: FakeScriptRepository, picker: FakeScriptPicker, scanner: FakeFileScanner, taskRepository = new FakeTaskRepository(), taskScheduler = new FakeTaskScheduler()) {
   const container = document.createElement('div')
   document.body.appendChild(container)
-  const app = createApp(ScriptsListView, { repository: repo, picker, scanner })
+  const app = createApp(ScriptsListView, { repository: repo, picker, scanner, taskRepository, taskScheduler })
   app.mount(container)
-  return { container, app }
+  return { container, app, taskRepository, taskScheduler }
 }
 
 function buttonTexts(container: HTMLElement): string[] {
@@ -281,13 +305,13 @@ describe('ScriptsListView', () => {
     const { container, app } = mountView(repo, new FakeScriptPicker(), new FakeFileScanner())
     await flush()
     ;(container.querySelector('[data-testid="delete-script-delete-1"]') as HTMLElement).click()
-    await nextTick()
+    await flush()
     expect(repo.items).toHaveLength(1)
     ;(container.querySelector('[data-testid="cancel-delete-btn"]') as HTMLElement).click()
     await nextTick()
     expect(repo.items).toHaveLength(1)
     ;(container.querySelector('[data-testid="delete-script-delete-1"]') as HTMLElement).click()
-    await nextTick()
+    await flush()
     ;(container.querySelector('[data-testid="confirm-delete-btn"]') as HTMLElement).click()
     await flush()
     expect(repo.items).toHaveLength(0)
@@ -303,13 +327,91 @@ describe('ScriptsListView', () => {
     await flush()
 
     ;(container.querySelector('[data-testid="delete-script-dialog-1"]') as HTMLElement).click()
-    await nextTick()
+    await flush()
 
     const dialog = container.querySelector('[data-testid="delete-dialog"]')
     expect(dialog).toBeTruthy()
     expect(dialog?.classList.contains('modal')).toBe(true)
     expect(dialog?.textContent).toContain('confirm.py')
     expect(repo.items).toHaveLength(1)
+
+    app.unmount()
+  })
+
+  it('warns about linked tasks in the delete dialog', async () => {
+    const repo = new FakeScriptRepository([{
+      id: 'linked-1', name: 'linked.py', path: 'C:/linked.py', type: 'python',
+      createdAt: '2024-01-01T00:00:00.000Z', updatedAt: '2024-01-01T00:00:00.000Z',
+    }])
+    const taskRepository = new FakeTaskRepository()
+    taskRepository.items = [
+      { id: 'task-a', name: 'Backup', scriptId: 'linked-1' },
+      { id: 'task-b', name: 'Nightly', scriptId: 'linked-1' },
+      { id: 'task-c', name: 'Other', scriptId: 'other-script' },
+    ]
+    const { container, app } = mountView(repo, new FakeScriptPicker(), new FakeFileScanner(), taskRepository)
+    await flush()
+
+    ;(container.querySelector('[data-testid="delete-script-linked-1"]') as HTMLElement).click()
+    await flush()
+
+    const dialog = container.querySelector('[data-testid="delete-dialog"]')
+    expect(dialog?.textContent).toContain('2 linked task(s)')
+    expect(dialog?.textContent).toContain('Backup')
+    expect(dialog?.textContent).toContain('Nightly')
+    expect(dialog?.textContent).not.toContain('Other')
+    expect(repo.items).toHaveLength(1)
+    expect(taskRepository.items).toHaveLength(3)
+
+    app.unmount()
+  })
+
+  it('cascades deletion to linked tasks before deleting the script', async () => {
+    const repo = new FakeScriptRepository([{
+      id: 'linked-1', name: 'linked.py', path: 'C:/linked.py', type: 'python',
+      createdAt: '2024-01-01T00:00:00.000Z', updatedAt: '2024-01-01T00:00:00.000Z',
+    }])
+    const taskRepository = new FakeTaskRepository()
+    taskRepository.items = [
+      { id: 'task-a', name: 'Backup', scriptId: 'linked-1' },
+      { id: 'task-b', name: 'Nightly', scriptId: 'linked-1' },
+      { id: 'task-c', name: 'Other', scriptId: 'other-script' },
+    ]
+    const taskScheduler = new FakeTaskScheduler()
+    const { container, app, taskRepository: tasks } = mountView(repo, new FakeScriptPicker(), new FakeFileScanner(), taskRepository, taskScheduler)
+    await flush()
+
+    ;(container.querySelector('[data-testid="delete-script-linked-1"]') as HTMLElement).click()
+    await flush()
+    ;(container.querySelector('[data-testid="confirm-delete-btn"]') as HTMLElement).click()
+    await flush()
+
+    expect(tasks.items.map((t) => t.id).sort()).toEqual(['task-c'])
+    expect(taskScheduler.deletes.sort()).toEqual(['task-a', 'task-b'])
+    expect(repo.items).toHaveLength(0)
+
+    app.unmount()
+  })
+
+  it('keeps the script when deleting a linked task fails on the scheduler', async () => {
+    const repo = new FakeScriptRepository([{
+      id: 'linked-1', name: 'linked.py', path: 'C:/linked.py', type: 'python',
+      createdAt: '2024-01-01T00:00:00.000Z', updatedAt: '2024-01-01T00:00:00.000Z',
+    }])
+    const taskRepository = new FakeTaskRepository()
+    taskRepository.items = [{ id: 'task-a', name: 'Backup', scriptId: 'linked-1' }]
+    const taskScheduler = new FakeTaskScheduler()
+    taskScheduler.error = 'ERROR: Access is denied.'
+    const { container, app } = mountView(repo, new FakeScriptPicker(), new FakeFileScanner(), taskRepository, taskScheduler)
+    await flush()
+
+    ;(container.querySelector('[data-testid="delete-script-linked-1"]') as HTMLElement).click()
+    await flush()
+    ;(container.querySelector('[data-testid="confirm-delete-btn"]') as HTMLElement).click()
+    await flush()
+
+    expect(repo.items).toHaveLength(1)
+    expect(container.querySelector('[data-testid="delete-error"]')?.textContent).toContain('Access is denied')
 
     app.unmount()
   })
