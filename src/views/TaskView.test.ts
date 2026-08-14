@@ -479,6 +479,25 @@ it('renders run history newest first with status, exit code, and output', async 
   app.unmount()
 })
 
+it('clamps run output to five lines with an ellipsis marker', async () => {
+  const runRepository = new FakeTaskRunRepository()
+  await runRepository.append(run({ id: 'run-long', status: 'success', exitCode: 0, stderr: 'line1\nline2\nline3\nline4\nline5\nline6\nline7' }))
+  await runRepository.append(run({ id: 'run-short', status: 'success', exitCode: 0, stderr: 'one\ntwo' }))
+  const { container, app } = mountView(new FakeTaskRepository(), new FakeTaskExecutor(), new FakeTaskScheduler(), new FakeLogger(), runRepository)
+  await flush()
+
+  const long = container.querySelector('[data-testid="run-row-run-long"]')?.textContent
+  expect(long).toContain('line1')
+  expect(long).toContain('line5')
+  expect(long).toContain('…')
+  expect(long).not.toContain('line6')
+  const short = container.querySelector('[data-testid="run-row-run-short"]')?.textContent
+  expect(short).toContain('one')
+  expect(short).toContain('two')
+  expect(short).not.toContain('…')
+  app.unmount()
+})
+
 it('filters run history by success and failure', async () => {
   const runRepository = new FakeTaskRunRepository()
   await runRepository.append(run({ id: 'run-1', status: 'success' }))

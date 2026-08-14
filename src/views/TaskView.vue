@@ -108,6 +108,13 @@ function runStatusBadge(status: TaskRunStatus): string {
   return 'badge-info'
 }
 
+function runOutput(run: TaskRun): string {
+  const output = run.stderr || run.stdout || '-'
+  const lines = output.split('\n')
+  if (lines.length <= 5) return output
+  return `${lines.slice(0, 5).join('\n')}\n…`
+}
+
 async function confirmClearRuns() {
   clearRunsTarget.value = false
   await taskRunRecorder.clear()
@@ -337,7 +344,7 @@ onMounted(() => {
               <td>{{ new Date(run.startedAt).toLocaleString() }}</td>
               <td>{{ run.finishedAt ? new Date(run.finishedAt).toLocaleString() : '-' }}</td>
               <td>{{ run.exitCode === null ? '-' : run.exitCode }}</td>
-              <td><span class="whitespace-pre-wrap text-xs">{{ run.stderr || run.stdout || '-' }}</span></td>
+              <td><span class="whitespace-pre-wrap text-xs">{{ runOutput(run) }}</span></td>
             </tr>
           </tbody>
         </table>
