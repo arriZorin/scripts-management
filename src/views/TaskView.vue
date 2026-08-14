@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import AlertIcon from '../components/icons/AlertIcon.vue'
 import type { Script } from '../models/Script'
 import type { Schedule, Task, TaskInput } from '../models/Task'
 import { todayDateString } from '../models/Task'
@@ -330,15 +331,16 @@ onMounted(() => {
       </div>
     </header>
     <main class="region body card p-4 m-2 rounded border border-gray-300 bg-white min-h-[200px] dark:bg-[#333333] dark:border-[#404040]">
-      <p v-if="operationResult" class="alert alert-success mb-3" data-testid="task-operation-result">{{ operationResult }}</p>
-      <p v-if="operationError" class="alert alert-error mb-3" data-testid="task-operation-error">{{ operationError }}</p>
-      <div v-if="reconcile.missing.length > 0 || reconcile.orphaned.length > 0" class="alert alert-warning mb-3" data-testid="reconcile-banner">
+      <div v-if="operationResult" class="alert alert-success mb-3" data-testid="task-operation-result" role="alert"><AlertIcon kind="success" /><span>{{ operationResult }}</span></div>
+      <div v-if="operationError" class="alert alert-error mb-3" data-testid="task-operation-error" role="alert"><AlertIcon kind="error" /><span>{{ operationError }}</span></div>
+      <div v-if="reconcile.missing.length > 0 || reconcile.orphaned.length > 0" class="alert alert-warning mb-3" data-testid="reconcile-banner" role="alert">
+        <AlertIcon kind="warning" />
         <div class="flex flex-row items-center justify-between w-full gap-2">
           <span>{{ reconcile.missing.length }} task(s) missing from Windows scheduler{{ reconcile.orphaned.length > 0 ? `, ${reconcile.orphaned.length} orphaned registration(s)` : '' }}</span>
           <button v-if="reconcile.missing.length > 0" class="btn btn-xs btn-warning" :disabled="repairing" data-testid="repair-tasks-btn" @click="repairTasks">{{ repairing ? 'Repairing...' : 'Repair' }}</button>
         </div>
       </div>
-      <p v-if="tasks.length === 0" class="alert alert-info" data-testid="task-empty-state">No tasks yet.</p>
+      <div v-if="tasks.length === 0" class="alert alert-info" data-testid="task-empty-state" role="alert"><AlertIcon kind="info" /><span>No tasks yet.</span></div>
       <table v-else class="table table-zebra w-full" data-testid="task-table">
         <thead><tr><th>Name</th><th>Script</th><th>Schedule</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody>
@@ -370,7 +372,7 @@ onMounted(() => {
             <button class="btn btn-xs" data-testid="runs-refresh-btn" @click="loadRuns">Refresh</button>
           </div>
         </div>
-        <p v-if="filteredRuns().length === 0" class="alert alert-info" data-testid="runs-empty-state">No runs yet.</p>
+        <div v-if="filteredRuns().length === 0" class="alert alert-info" data-testid="runs-empty-state" role="alert"><AlertIcon kind="info" /><span>No runs yet.</span></div>
         <table v-else class="table table-zebra w-full" data-testid="runs-table">
           <thead>
             <tr>
@@ -411,7 +413,7 @@ onMounted(() => {
           <select :value="form.schedule.type" class="select select-bordered w-full" data-testid="schedule-type-select" @change="updateScheduleType(($event.target as HTMLSelectElement).value as Schedule['type'])"><option value="once">Once</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="interval">Interval</option></select>
           <label v-if="form.schedule.type !== 'once'" class="label mt-2">Start date & time</label>
           <input v-if="form.schedule.type !== 'once'" :value="scheduleStartDateTime()" class="input input-bordered w-full" data-testid="start-datetime-input" type="datetime-local" @input="onStartDateTimeChange" />
-          <p v-if="error" class="alert alert-error mt-3">{{ error }}</p>
+          <div v-if="error" class="alert alert-error mt-3" role="alert"><AlertIcon kind="error" /><span>{{ error }}</span></div>
         </fieldset>
         <div class="modal-action"><button class="btn btn-primary" data-testid="save-task-btn" @click="save">Save</button><button class="btn" data-testid="cancel-task-btn" @click="closeForm">Cancel</button></div>
       </div>

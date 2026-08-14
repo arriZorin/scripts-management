@@ -13,9 +13,9 @@
         <button @click="handleAddFolder" class="btn btn-primary px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-500 btn-script-action" data-testid="add-folder-btn">Add Folder</button>
       </div>
       <div class="card-body">
-        <p v-if="busy" class="alert alert-info text-gray-600">Adding...</p>
-        <p v-if="error" role="alert" class="alert alert-error text-red-600">{{ error }}</p>
-        <p v-if="summary" class="alert alert-info text-gray-600">{{ summary }}</p>
+        <div v-if="busy" class="alert alert-info text-gray-600" role="alert"><AlertIcon kind="info" /><span>Adding...</span></div>
+        <div v-if="error" role="alert" class="alert alert-error text-red-600"><AlertIcon kind="error" /><span>{{ error }}</span></div>
+        <div v-if="summary" class="alert alert-info text-gray-600" role="alert"><AlertIcon kind="info" /><span>{{ summary }}</span></div>
       </div>
       <table data-testid="script-table" class="table table-zebra w-full text-sm">
         <thead>
@@ -60,7 +60,7 @@
               <textarea v-model="editDescription" data-testid="edit-description-input" class="textarea textarea-bordered h-20" placeholder="Script description" />
             </label>
           </div>
-          <p v-if="editError" class="alert alert-error mb-4">{{ editError }}</p>
+          <div v-if="editError" class="alert alert-error mb-4" role="alert"><AlertIcon kind="error" /><span>{{ editError }}</span></div>
           <div class="flex justify-between items-center">
             <div class="text-sm text-gray-600">
               <div class="mb-1">Path: <span class="script-name">{{ selectedScript?.path }}</span></div>
@@ -82,7 +82,8 @@
         <div class="modal-box p-4 max-w-md">
           <h3 class="text-lg font-bold mb-2">Delete Script</h3>
           <p class="text-gray-600 mb-4">Are you sure you want to delete <strong>{{ deleteTarget.name }}</strong>?</p>
-          <div v-if="linkedTasks.length > 0" class="alert alert-warning mb-4" data-testid="linked-tasks-warning">
+          <div v-if="linkedTasks.length > 0" class="alert alert-warning mb-4" data-testid="linked-tasks-warning" role="alert">
+            <AlertIcon kind="warning" />
             <div>
               <strong>{{ linkedTasks.length }} linked task(s) will also be deleted:</strong>
               <ul class="list-disc list-inside mt-1">
@@ -90,7 +91,7 @@
               </ul>
             </div>
           </div>
-          <p v-if="deleteError" class="alert alert-error mb-4" data-testid="delete-error">{{ deleteError }}</p>
+          <div v-if="deleteError" class="alert alert-error mb-4" data-testid="delete-error" role="alert"><AlertIcon kind="error" /><span>{{ deleteError }}</span></div>
           <div class="flex justify-between items-center">
             <div class="text-sm text-gray-500">
               <div class="mb-1">Path: <span class="script-name">{{ deleteTarget.path }}</span></div>
@@ -107,7 +108,7 @@
         </form>
       </dialog>
       <div class="card-body">
-        <p v-if="scripts.length === 0" class="alert alert-info text-gray-600">No scripts yet. Add a .py file or folder.</p>
+        <div v-if="scripts.length === 0" class="alert alert-info text-gray-600" role="alert"><AlertIcon kind="info" /><span>No scripts yet. Add a .py file or folder.</span></div>
       </div>
     </main>
     <footer class="region footer card p-4 m-2 rounded border border-gray-300 bg-gray-100 mt-4 text-center text-sm text-gray-500 dark:bg-[#2f2f2f] dark:border-[#404040] dark:text-[#999999]">
@@ -120,6 +121,7 @@
 
 <script setup lang="ts">
 import { computed, defineComponent, ref } from 'vue';
+import AlertIcon from '../components/icons/AlertIcon.vue';
 import { useScripts } from '../services/scriptImport/useScripts';
 import { JsonScriptRepository } from '../services/JsonScriptRepository';
 import { JsonTaskRepository } from '../services/JsonTaskRepository';

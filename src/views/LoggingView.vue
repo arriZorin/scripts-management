@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import AlertIcon from '../components/icons/AlertIcon.vue'
 import type { LogEntry } from '../models/LogEntry'
 import type { LogRepository } from '../services/LogRepository'
 import { JsonLogRepository } from '../services/JsonLogRepository'
@@ -56,7 +57,7 @@ onMounted(load)
       </div>
     </header>
     <main class="region body card p-4 m-2 rounded border border-gray-300 bg-white min-h-[200px] dark:bg-[#333333] dark:border-[#404040]">
-      <p v-if="logs.length === 0" class="alert alert-info" data-testid="log-empty-state">No logs yet.</p>
+      <div v-if="logs.length === 0" class="alert alert-info" data-testid="log-empty-state" role="alert"><AlertIcon kind="info" /><span>No logs yet.</span></div>
       <table v-else class="table table-zebra w-full" data-testid="log-table">
         <thead><tr><th>Time</th><th>Mode</th><th>Level</th><th>Source</th><th>Message</th><th>Duration</th></tr></thead>
         <tbody>
