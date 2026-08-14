@@ -219,7 +219,7 @@ describe('TaskView', () => {
 
 it('edits, toggles, and deletes a task through row actions', async () => {
   const repository = new FakeTaskRepository()
-  await repository.create({ name: 'Existing', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', time: '08:00' }, enabled: true })
+  await repository.create({ name: 'Existing', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', startDate: '2026-08-14', time: '08:00' }, enabled: true })
   const { container, app } = mountView(repository)
   await flush()
 
@@ -246,7 +246,7 @@ it('edits, toggles, and deletes a task through row actions', async () => {
 
 it('runs a task now and shows the executor result', async () => {
   const repository = new FakeTaskRepository()
-  await repository.create({ name: 'Run me', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', time: '08:00' }, enabled: true })
+  await repository.create({ name: 'Run me', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', startDate: '2026-08-14', time: '08:00' }, enabled: true })
   const executor = new FakeTaskExecutor()
   const { container, app } = mountView(repository, executor)
   await flush()
@@ -261,7 +261,7 @@ it('runs a task now and shows the executor result', async () => {
 
 it('shows the real string error when running a task fails', async () => {
   const repository = new FakeTaskRepository()
-  await repository.create({ name: 'Run me', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', time: '08:00' }, enabled: true })
+  await repository.create({ name: 'Run me', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', startDate: '2026-08-14', time: '08:00' }, enabled: true })
   const executor = new FakeTaskExecutor()
   executor.error = 'ERROR: The system cannot find the file specified.'
   const { container, app } = mountView(repository, executor)
@@ -296,7 +296,7 @@ it('registers a new task with the scheduler after saving', async () => {
 
 it('resyncs the scheduler when editing a task', async () => {
   const repository = new FakeTaskRepository()
-  await repository.create({ name: 'Existing', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', time: '08:00' }, enabled: true })
+  await repository.create({ name: 'Existing', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', startDate: '2026-08-14', time: '08:00' }, enabled: true })
   const scheduler = new FakeTaskScheduler()
   const { container, app } = mountView(repository, new FakeTaskExecutor(), scheduler)
   await flush()
@@ -317,7 +317,7 @@ it('resyncs the scheduler when editing a task', async () => {
 
 it('syncs enable state changes to the scheduler', async () => {
   const repository = new FakeTaskRepository()
-  await repository.create({ name: 'Existing', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', time: '08:00' }, enabled: true })
+  await repository.create({ name: 'Existing', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', startDate: '2026-08-14', time: '08:00' }, enabled: true })
   const scheduler = new FakeTaskScheduler()
   const logger = new FakeLogger()
   const { container, app } = mountView(repository, new FakeTaskExecutor(), scheduler, logger)
@@ -335,7 +335,7 @@ it('syncs enable state changes to the scheduler', async () => {
 
 it('removes the scheduled task when deleting a task', async () => {
   const repository = new FakeTaskRepository()
-  await repository.create({ name: 'Existing', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', time: '08:00' }, enabled: true })
+  await repository.create({ name: 'Existing', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', startDate: '2026-08-14', time: '08:00' }, enabled: true })
   const scheduler = new FakeTaskScheduler()
   const { container, app } = mountView(repository, new FakeTaskExecutor(), scheduler)
   await flush()
@@ -351,7 +351,7 @@ it('removes the scheduled task when deleting a task', async () => {
 
 it('logs a successful run with its duration', async () => {
   const repository = new FakeTaskRepository()
-  await repository.create({ name: 'Run me', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', time: '08:00' }, enabled: true })
+  await repository.create({ name: 'Run me', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', startDate: '2026-08-14', time: '08:00' }, enabled: true })
   const logger = new FakeLogger()
   const { container, app } = mountView(repository, new FakeTaskExecutor(), new FakeTaskScheduler(), logger)
   await flush()
@@ -369,7 +369,7 @@ it('logs a successful run with its duration', async () => {
 
 it('logs a failed run as an error with the real message', async () => {
   const repository = new FakeTaskRepository()
-  await repository.create({ name: 'Run me', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', time: '08:00' }, enabled: true })
+  await repository.create({ name: 'Run me', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', startDate: '2026-08-14', time: '08:00' }, enabled: true })
   const executor = new FakeTaskExecutor()
   executor.error = 'ERROR: The system cannot find the file specified.'
   const logger = new FakeLogger()
@@ -387,7 +387,7 @@ it('logs a failed run as an error with the real message', async () => {
 
 it('logs enable/disable toggles with the new state and duration', async () => {
   const repository = new FakeTaskRepository()
-  await repository.create({ name: 'Existing', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', time: '08:00' }, enabled: true })
+  await repository.create({ name: 'Existing', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', startDate: '2026-08-14', time: '08:00' }, enabled: true })
   const logger = new FakeLogger()
   const { container, app } = mountView(repository, new FakeTaskExecutor(), new FakeTaskScheduler(), logger)
   await flush()
@@ -501,7 +501,7 @@ it('cancelling the clear dialog keeps run history', async () => {
 it('records a running run when Run Now succeeds', async () => {
   const runRepository = new FakeTaskRunRepository()
   const repository = new FakeTaskRepository()
-  await repository.create({ name: 'Run me', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', time: '08:00' }, enabled: true })
+  await repository.create({ name: 'Run me', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', startDate: '2026-08-14', time: '08:00' }, enabled: true })
   const { container, app } = mountView(repository, new FakeTaskExecutor(), new FakeTaskScheduler(), new FakeLogger(), runRepository)
   await flush()
 
@@ -516,7 +516,7 @@ it('records a running run when Run Now succeeds', async () => {
 it('disables Run Now for disabled tasks and does not invoke the executor', async () => {
   const runRepository = new FakeTaskRunRepository()
   const repository = new FakeTaskRepository()
-  await repository.create({ name: 'Disabled task', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', time: '08:00' }, enabled: false })
+  await repository.create({ name: 'Disabled task', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', startDate: '2026-08-14', time: '08:00' }, enabled: false })
   const executor = new FakeTaskExecutor()
   const { container, app } = mountView(repository, executor, new FakeTaskScheduler(), new FakeLogger(), runRepository)
   await flush()
@@ -534,7 +534,7 @@ it('disables Run Now for disabled tasks and does not invoke the executor', async
 it('records a failed run when Run Now errors', async () => {
   const runRepository = new FakeTaskRunRepository()
   const repository = new FakeTaskRepository()
-  await repository.create({ name: 'Run me', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', time: '08:00' }, enabled: true })
+  await repository.create({ name: 'Run me', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', startDate: '2026-08-14', time: '08:00' }, enabled: true })
   const executor = new FakeTaskExecutor()
   executor.error = 'ERROR: The system cannot find the file specified.'
   const { container, app } = mountView(repository, executor, new FakeTaskScheduler(), new FakeLogger(), runRepository)

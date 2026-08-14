@@ -40,7 +40,7 @@ const validInput: TaskInput = {
   scriptId: 'script-1',
   interpreter: 'python',
   arguments: ['--full'],
-  schedule: { type: 'daily', time: '08:30' },
+  schedule: { type: 'daily', startDate: '2026-08-14', time: '08:30' },
   enabled: true,
 }
 
@@ -97,8 +97,8 @@ describe('JsonTaskRepository', () => {
     ['blank name', { name: '   ' }],
     ['unknown script', { scriptId: 'missing' }],
     ['blank interpreter', { interpreter: ' ' }],
-    ['invalid daily time', { schedule: { type: 'daily', time: '25:99' } }],
-    ['invalid interval', { schedule: { type: 'interval', every: 0, unit: 'minutes' } }],
+    ['invalid daily time', { schedule: { type: 'daily', startDate: '2026-08-14', time: '25:99' } }],
+    ['invalid interval', { schedule: { type: 'interval', startDate: '2026-08-14', every: 0, unit: 'minutes' } }],
   ])('rejects %s', async (_label, patch) => {
     await expect(repository.create({ ...validInput, ...patch } as TaskInput)).rejects.toThrow()
     expect(storage.store.has('/fake/tasks.json')).toBe(false)

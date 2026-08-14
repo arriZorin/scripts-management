@@ -63,10 +63,10 @@ function schedulePayload(schedule: Schedule): Record<string, unknown> {
     case 'once':
       return { schedule_type: 'once', value: schedule.runAt }
     case 'daily':
-      return { schedule_type: 'daily', value: schedule.time }
+      return { schedule_type: 'daily', value: schedule.time, start_date: schedule.startDate }
     case 'weekly':
-      return { schedule_type: 'weekly', value: schedule.time, day_of_week: schedule.dayOfWeek }
+      return { schedule_type: 'weekly', value: schedule.time, day_of_week: schedule.dayOfWeek, start_date: schedule.startDate }
     case 'interval':
-      return { schedule_type: 'interval', value: '', every: schedule.every, unit: schedule.unit }
+      return { schedule_type: 'interval', value: '', every: schedule.every, unit: schedule.unit, start_date: schedule.startDate }
   }
 }

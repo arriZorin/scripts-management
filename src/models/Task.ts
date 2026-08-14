@@ -9,9 +9,9 @@ export type TaskStatus =
 
 export type Schedule =
   | { type: 'once'; runAt: string }
-  | { type: 'daily'; time: string }
-  | { type: 'weekly'; dayOfWeek: 0 | 1 | 2 | 3 | 4 | 5 | 6; time: string }
-  | { type: 'interval'; every: number; unit: 'minutes' | 'hours' }
+  | { type: 'daily'; startDate: string; time: string }
+  | { type: 'weekly'; startDate: string; dayOfWeek: 0 | 1 | 2 | 3 | 4 | 5 | 6; time: string }
+  | { type: 'interval'; startDate: string; every: number; unit: 'minutes' | 'hours' }
 
 export interface Task {
   id: string
@@ -35,8 +35,24 @@ export function isValidTime(time: string): boolean {
   return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time)
 }
 
+export function isValidDate(date: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false
+  const [year, month, day] = date.split('-').map(Number)
+  const parsed = new Date(Date.UTC(year, month - 1, day))
+  return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day
+}
+
+export function todayDateString(): string {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 export function isValidSchedule(schedule: Schedule): boolean {
   if (schedule.type === 'once') return !Number.isNaN(Date.parse(schedule.runAt))
+  if (!isValidDate(schedule.startDate)) return false
   if (schedule.type === 'daily') return isValidTime(schedule.time)
   if (schedule.type === 'weekly') return schedule.dayOfWeek >= 0 && schedule.dayOfWeek <= 6 && isValidTime(schedule.time)
   return Number.isInteger(schedule.every) && schedule.every > 0 && (schedule.unit === 'minutes' || schedule.unit === 'hours')

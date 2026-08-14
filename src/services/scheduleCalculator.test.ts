@@ -22,7 +22,7 @@ describe('calculateNextRun', () => {
 
   it('calculates the next daily occurrence today or tomorrow', () => {
     const from = localDate(2026, 8, 13, 10, 0)
-    const schedule: Schedule = { type: 'daily', time: '12:30' }
+    const schedule: Schedule = { type: 'daily', startDate: '2026-08-14', time: '12:30' }
     const next = calculateNextRun(schedule, from)
 
     expect(next).toEqual(localDate(2026, 8, 13, 12, 30))
@@ -31,7 +31,7 @@ describe('calculateNextRun', () => {
 
   it('calculates the next weekly occurrence', () => {
     const from = localDate(2026, 8, 13, 10, 0) // Thursday
-    const schedule: Schedule = { type: 'weekly', dayOfWeek: 1, time: '09:15' } // Monday
+    const schedule: Schedule = { type: 'weekly', startDate: '2026-08-14', dayOfWeek: 1, time: '09:15' } // Monday
 
     expect(calculateNextRun(schedule, from)).toEqual(localDate(2026, 8, 17, 9, 15))
   })
@@ -39,16 +39,16 @@ describe('calculateNextRun', () => {
   it('calculates the next interval in minutes or hours', () => {
     const from = localDate(2026, 8, 13, 10, 0)
 
-    expect(calculateNextRun({ type: 'interval', every: 15, unit: 'minutes' }, from))
+    expect(calculateNextRun({ type: 'interval', startDate: '2026-08-14', every: 15, unit: 'minutes' }, from))
       .toEqual(localDate(2026, 8, 13, 10, 15))
-    expect(calculateNextRun({ type: 'interval', every: 2, unit: 'hours' }, from))
+    expect(calculateNextRun({ type: 'interval', startDate: '2026-08-14', every: 2, unit: 'hours' }, from))
       .toEqual(localDate(2026, 8, 13, 12, 0))
   })
 
   it('rejects invalid schedule values', () => {
     const from = localDate(2026, 8, 13, 10, 0)
 
-    expect(() => calculateNextRun({ type: 'daily', time: '25:00' }, from)).toThrow('time')
-    expect(() => calculateNextRun({ type: 'interval', every: 0, unit: 'minutes' }, from)).toThrow('interval')
+    expect(() => calculateNextRun({ type: 'daily', startDate: '2026-08-14', time: '25:00' }, from)).toThrow('time')
+    expect(() => calculateNextRun({ type: 'interval', startDate: '2026-08-14', every: 0, unit: 'minutes' }, from)).toThrow('interval')
   })
 })
