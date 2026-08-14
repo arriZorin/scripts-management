@@ -19,6 +19,7 @@ import { TaskRunRecorder } from '../services/TaskRunRecorder'
 import { TauriFileStorage } from '../services/TauriFileStorage'
 import { listRegisteredTasks, reconcileTasks, repairMissingTasks } from '../services/TaskReconciler'
 import type { ReconcileResult } from '../services/TaskReconciler'
+import { errorMessage } from '../services/errorMessage'
 
 interface Props {
   taskRepository?: TaskRepository
@@ -314,9 +315,12 @@ async function runTask(task: Task) {
     await load()
     await loadRuns()
   } catch (cause) {
-    operationError.value = errorText(cause, 'Failed to run task.')
-    await taskRunRecorder.recordFailure(run, operationError.value)
-    await props.logger?.record('task.run', `run ${task.name} failed: ${operationError.value}`, 'error', Math.round(performance.now() - started))
+    // Run-now errors are the script's own stderr output — preserve it
+    // verbatim in the run history rather than rewriting it as guidance.
+    const message = rawErrorText(cause, 'Failed to run task.')
+    operationError.value = message
+    await taskRunRecorder.recordFailure(run, message)
+    await props.logger?.record('task.run', `run ${task.name} failed: ${message}`, 'error', Math.round(performance.now() - started))
   } finally {
     runningTaskId.value = null
   }
@@ -345,6 +349,10 @@ async function confirmDelete() {
 }
 
 function errorText(cause: unknown, fallback: string): string {
+  return errorMessage(cause, fallback)
+}
+
+function rawErrorText(cause: unknown, fallback: string): string {
   if (cause instanceof Error) return cause.message
   if (typeof cause === 'string' && cause.trim()) return cause
   return fallback

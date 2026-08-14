@@ -265,7 +265,7 @@ Implementation notes:
 - [ ] Handle app closed/restarted scenarios
 - [ ] Handle machine restart
 - [x] Handle deleted/moved scripts (row-level "script missing" badge when `scriptId` no longer resolves; repair skips them)
-- [ ] Show actionable error messages
+- [x] Show actionable error messages
 
 **Acceptance:** The scheduler continues working when the app is closed and can recover from configuration drift.
 
