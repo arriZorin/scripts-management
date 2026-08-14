@@ -1,11 +1,16 @@
 import { createApp, nextTick } from 'vue'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import TaskView from './TaskView.vue'
 import type { Script } from '../models/Script'
 import type { Task, TaskInput } from '../models/Task'
 import type { TaskRun } from '../models/TaskRun'
 import { TaskRunRecorder } from '../services/TaskRunRecorder'
 import type { TaskRunRepository } from '../services/TaskRunRepository'
+
+vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
+import { invoke } from '@tauri-apps/api/core'
+
+const mockedInvoke = vi.mocked(invoke)
 
 class FakeTaskExecutor {
   calls: string[] = []
@@ -145,6 +150,16 @@ async function flush() {
     await Promise.resolve()
   }
 }
+
+beforeEach(() => {
+  mockedInvoke.mockReset()
+  mockedInvoke.mockImplementation((command: string) => {
+    if (command === 'list_scheduled_tasks') return Promise.resolve([])
+    // Unknown commands reject like the unmocked Tauri bridge, so
+    // TaskRunRecorder.finalizePending fail-closes and keeps runs 'running'.
+    return Promise.reject(`unmocked command: ${command}`)
+  })
+})
 
 describe('TaskView', () => {
   it('renders an empty state and opens the new task form', async () => {
@@ -652,5 +667,65 @@ it('records a failed run when Run Now errors', async () => {
   expect(runRepository.items).toHaveLength(1)
   expect(runRepository.items[0]).toMatchObject({ taskId: 'task-1', status: 'failed' })
   expect(runRepository.items[0].stderr).toContain('The system cannot find the file specified')
+  app.unmount()
+})
+
+it('shows a reconcile banner when tasks are missing or orphaned', async () => {
+  const repository = new FakeTaskRepository()
+  await repository.create({ name: 'Registered', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', startAt: '2026-08-14T08:00:00' }, enabled: true })
+  await repository.create({ name: 'Missing', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', startAt: '2026-08-14T08:00:00' }, enabled: true })
+  // FakeTaskRepository gives every created task id 'task-1', so the
+  // 'ScriptsManagement\task-1' registration matches BOTH → 0 missing, 1 orphan.
+  mockedInvoke.mockImplementation((command: string) => {
+    if (command === 'list_scheduled_tasks') return Promise.resolve(['ScriptsManagement\\task-1', 'ScriptsManagement\\task-orphan'])
+    return Promise.reject(`unmocked command: ${command}`)
+  })
+  const { container, app } = mountView(repository)
+  await flush()
+
+  const banner = container.querySelector('[data-testid="reconcile-banner"]')
+  expect(banner).toBeTruthy()
+  expect(banner?.textContent).toContain('1 orphaned')
+  app.unmount()
+})
+
+it('repairs missing tasks by re-registering them', async () => {
+  const repository = new FakeTaskRepository()
+  await repository.create({ name: 'Missing', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', startAt: '2026-08-14T08:00:00' }, enabled: true })
+  // Simulate registration: the scheduler's create() makes the name appear
+  // in list_scheduled_tasks, so repair clears the banner.
+  const registered: string[] = []
+  mockedInvoke.mockImplementation((command: string) => {
+    if (command === 'list_scheduled_tasks') return Promise.resolve([...registered])
+    return Promise.reject(`unmocked command: ${command}`)
+  })
+  const scheduler = new FakeTaskScheduler()
+  const originalCreate = scheduler.create.bind(scheduler)
+  scheduler.create = async (task: Task) => {
+    await originalCreate(task)
+    registered.push(`ScriptsManagement\\${task.id}`)
+  }
+  const { container, app } = mountView(repository, new FakeTaskExecutor(), scheduler)
+  await flush()
+
+  expect(container.querySelector('[data-testid="reconcile-banner"]')).toBeTruthy()
+  ;(container.querySelector('[data-testid="repair-tasks-btn"]') as HTMLElement).click()
+  await flush()
+
+  expect(scheduler.creates).toHaveLength(1)
+  expect(scheduler.creates[0].id).toBe('task-1')
+  expect(container.querySelector('[data-testid="reconcile-banner"]')).toBeNull()
+  app.unmount()
+})
+
+it('flags tasks whose script is missing from the scripts list', async () => {
+  const repository = new FakeTaskRepository()
+  await repository.create({ name: 'Dangling', scriptId: 'gone-script', interpreter: 'python', arguments: [], schedule: { type: 'daily', startAt: '2026-08-14T08:00:00' }, enabled: true })
+  const { container, app } = mountView(repository)
+  await flush()
+
+  const badge = container.querySelector('[data-testid="task-row-task-1"] [data-testid="script-missing-badge"]')
+  expect(badge).toBeTruthy()
+  expect(badge?.textContent).toContain('script missing')
   app.unmount()
 })

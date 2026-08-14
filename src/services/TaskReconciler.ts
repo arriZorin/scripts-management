@@ -1,3 +1,4 @@
+import { invoke } from '@tauri-apps/api/core'
 import type { Script } from '../models/Script'
 import type { Task } from '../models/Task'
 import { taskWindowsName } from '../models/Task'
@@ -8,6 +9,11 @@ export interface ReconcileResult {
   missing: Task[]
   /** Windows registrations in the app namespace with no matching JSON task. */
   orphaned: string[]
+}
+
+/** Names of all registered tasks in the app namespace (Tauri command). */
+export async function listRegisteredTasks(): Promise<string[]> {
+  return invoke<string[]>('list_scheduled_tasks')
 }
 
 export function reconcileTasks(tasks: Task[], registeredNames: string[]): ReconcileResult {

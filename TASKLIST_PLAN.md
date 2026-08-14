@@ -254,15 +254,15 @@ Implementation notes:
 
 ## Phase 7 — Reliability and Recovery
 
-- [ ] Load tasks from JSON on app startup
-- [ ] Reconcile JSON tasks with Windows Scheduled Tasks
-- [ ] Detect missing Windows tasks
-- [ ] Detect orphaned Windows tasks
-- [ ] Add Repair task action
+- [x] Load tasks from JSON on app startup (TaskView loads on mount)
+- [x] Reconcile JSON tasks with Windows Scheduled Tasks (`list_scheduled_tasks` COM + `TaskReconciler`)
+- [x] Detect missing Windows tasks (JSON task with no registration → reconcile banner)
+- [x] Detect orphaned Windows tasks (registration with no JSON task → reconcile banner)
+- [x] Add Repair task action (re-registers missing tasks via `repairMissingTasks`)
 - [x] Cascade delete: deleting a script warns about linked tasks and removes them (JSON + Windows registration) first — no orphaned Windows tasks for deleted scripts
 - [ ] Handle app closed/restarted scenarios
 - [ ] Handle machine restart
-- [ ] Handle deleted/moved scripts
+- [x] Handle deleted/moved scripts (row-level "script missing" badge when `scriptId` no longer resolves; repair skips them)
 - [ ] Show actionable error messages
 
 **Acceptance:** The scheduler continues working when the app is closed and can recover from configuration drift.

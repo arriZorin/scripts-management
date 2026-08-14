@@ -15,6 +15,8 @@ import type { TaskRunRepository } from '../services/TaskRunRepository'
 import { JsonTaskRunRepository } from '../services/JsonTaskRunRepository'
 import { TaskRunRecorder } from '../services/TaskRunRecorder'
 import { TauriFileStorage } from '../services/TauriFileStorage'
+import { listRegisteredTasks, reconcileTasks, repairMissingTasks } from '../services/TaskReconciler'
+import type { ReconcileResult } from '../services/TaskReconciler'
 
 interface Props {
   taskRepository?: TaskRepository
@@ -53,6 +55,9 @@ const operationError = ref('')
 const runs = ref<TaskRun[]>([])
 const runFilter = ref<'all' | 'success' | 'failed'>('all')
 const clearRunsTarget = ref(false)
+const registeredTasks = ref<string[]>([])
+const reconcile = ref<ReconcileResult>({ missing: [], orphaned: [] })
+const repairing = ref(false)
 
 async function loadScripts() {
   if (!scriptRepository) return
@@ -79,6 +84,31 @@ async function load() {
     tasks.value = await taskRepository.list()
   } catch {
     tasks.value = []
+  }
+  await loadReconcile()
+}
+
+async function loadReconcile() {
+  try {
+    registeredTasks.value = await listRegisteredTasks()
+    reconcile.value = reconcileTasks(tasks.value, registeredTasks.value)
+  } catch {
+    reconcile.value = { missing: [], orphaned: [] }
+  }
+}
+
+async function repairTasks() {
+  if (reconcile.value.missing.length === 0) return
+  repairing.value = true
+  operationError.value = ''
+  try {
+    await repairMissingTasks(tasks.value, registeredTasks.value, scripts.value, taskScheduler)
+    await load()
+    operationResult.value = `Repaired ${reconcile.value.missing.length} task(s).`
+  } catch (cause) {
+    operationError.value = errorText(cause, 'Failed to repair tasks.')
+  } finally {
+    repairing.value = false
   }
 }
 
@@ -302,13 +332,19 @@ onMounted(() => {
     <main class="region body card p-4 m-2 rounded border border-gray-300 bg-white min-h-[200px] dark:bg-[#333333] dark:border-[#404040]">
       <p v-if="operationResult" class="alert alert-success mb-3" data-testid="task-operation-result">{{ operationResult }}</p>
       <p v-if="operationError" class="alert alert-error mb-3" data-testid="task-operation-error">{{ operationError }}</p>
+      <div v-if="reconcile.missing.length > 0 || reconcile.orphaned.length > 0" class="alert alert-warning mb-3" data-testid="reconcile-banner">
+        <div class="flex flex-row items-center justify-between w-full gap-2">
+          <span>{{ reconcile.missing.length }} task(s) missing from Windows scheduler{{ reconcile.orphaned.length > 0 ? `, ${reconcile.orphaned.length} orphaned registration(s)` : '' }}</span>
+          <button v-if="reconcile.missing.length > 0" class="btn btn-xs btn-warning" :disabled="repairing" data-testid="repair-tasks-btn" @click="repairTasks">{{ repairing ? 'Repairing...' : 'Repair' }}</button>
+        </div>
+      </div>
       <p v-if="tasks.length === 0" class="alert alert-info" data-testid="task-empty-state">No tasks yet.</p>
       <table v-else class="table table-zebra w-full" data-testid="task-table">
         <thead><tr><th>Name</th><th>Script</th><th>Schedule</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody>
           <tr v-for="task in tasks" :key="task.id" :data-testid="`task-row-${task.id}`">
             <td>{{ task.name }}</td>
-            <td>{{ scripts.find(script => script.id === task.scriptId)?.name ?? task.scriptId }}</td>
+            <td>{{ scripts.find(script => script.id === task.scriptId)?.name ?? task.scriptId }}<span v-if="!scripts.some(script => script.id === task.scriptId)" class="badge badge-error ml-2" data-testid="script-missing-badge">script missing</span></td>
             <td>{{ scheduleLabel(task.schedule) }}</td>
             <td><span class="badge" :class="task.enabled ? 'badge-success' : 'badge-ghost'">{{ task.enabled ? 'Enabled' : 'Disabled' }}</span></td>
             <td><div class="join">
