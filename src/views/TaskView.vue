@@ -410,7 +410,7 @@ onMounted(() => {
           </tr>
         </tbody>
       </table>
-
+      <div class="divider"></div>
       <section class="mt-8" data-testid="run-history-panel">
         <div class="flex flex-row items-center justify-between mb-3">
           <h2 class="text-lg font-semibold">Execution History</h2>
