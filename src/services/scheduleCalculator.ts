@@ -7,6 +7,13 @@ function parseTime(time: string): [number, number] {
   return [hours, minutes]
 }
 
+function startAtTime(startAt: string): string {
+  const time = startAt.slice(11, 16)
+  const match = /^(?:[01]\d|2[0-3]):[0-5]\d$/.exec(time)
+  if (!match) throw new Error('Invalid time')
+  return time
+}
+
 export function calculateNextRun(schedule: Schedule, from: Date): Date {
   if (schedule.type === 'once') {
     const runAt = new Date(schedule.runAt)
@@ -23,7 +30,7 @@ export function calculateNextRun(schedule: Schedule, from: Date): Date {
     return new Date(from.getTime() + milliseconds)
   }
 
-  const [hours, minutes] = parseTime(schedule.time)
+  const [hours, minutes] = parseTime(startAtTime(schedule.startAt))
   const next = new Date(from)
   next.setSeconds(0, 0)
   next.setHours(hours, minutes, 0, 0)

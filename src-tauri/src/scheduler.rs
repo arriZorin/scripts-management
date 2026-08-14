@@ -27,16 +27,14 @@ pub enum ScheduleSpec {
         run_at: String,
     },
     Daily {
-        start_date: String,
-        time: String,
+        start_at: String,
     },
     Weekly {
-        start_date: String,
+        start_at: String,
         day_of_week: u8,
-        time: String,
     },
     Interval {
-        start_date: String,
+        start_at: String,
         every: u32,
         unit: String,
     },
@@ -79,19 +77,51 @@ fn validate_absolute_path(path: &str, label: &str) -> Result<(), String> {
 }
 
 #[cfg(not(windows))]
-fn validate_time(time: &str) -> Result<(), String> {
-    let parts: Vec<&str> = time.split(':').collect();
+fn validate_datetime(value: &str) -> Result<(), String> {
+    validate_text(value, "start_at")?;
+    let parts: Vec<&str> = value.split('T').collect();
     if parts.len() != 2 {
-        return Err("time must use HH:mm".to_string());
+        return Err("start_at must use YYYY-MM-DDTHH:mm:00".to_string());
     }
-    let hour = parts[0]
+    let time = parts[1];
+    let time_parts: Vec<&str> = time.split(':').collect();
+    if time_parts.len() != 3 || time_parts[2] != "00" {
+        return Err("start_at must use YYYY-MM-DDTHH:mm:00".to_string());
+    }
+    let hour = time_parts[0]
         .parse::<u8>()
-        .map_err(|_| "time must use HH:mm".to_string())?;
-    let minute = parts[1]
+        .map_err(|_| "start_at must use YYYY-MM-DDTHH:mm:00".to_string())?;
+    let minute = time_parts[1]
         .parse::<u8>()
-        .map_err(|_| "time must use HH:mm".to_string())?;
-    if hour > 23 || minute > 59 || parts[0].len() != 2 || parts[1].len() != 2 {
-        return Err("time must use HH:mm".to_string());
+        .map_err(|_| "start_at must use YYYY-MM-DDTHH:mm:00".to_string())?;
+    if hour > 23 || minute > 59 || time_parts[0].len() != 2 || time_parts[1].len() != 2 {
+        return Err("start_at must use YYYY-MM-DDTHH:mm:00".to_string());
+    }
+    let date = parts[0];
+    let date_parts: Vec<&str> = date.split('-').collect();
+    if date_parts.len() != 3 {
+        return Err("start_at must use YYYY-MM-DDTHH:mm:00".to_string());
+    }
+    let year = date_parts[0]
+        .parse::<u32>()
+        .map_err(|_| "start_at must use YYYY-MM-DDTHH:mm:00".to_string())?;
+    let month = date_parts[1]
+        .parse::<u32>()
+        .map_err(|_| "start_at must use YYYY-MM-DDTHH:mm:00".to_string())?;
+    let day = date_parts[2]
+        .parse::<u32>()
+        .map_err(|_| "start_at must use YYYY-MM-DDTHH:mm:00".to_string())?;
+    if !(1..=12).contains(&month) {
+        return Err("start_at must use YYYY-MM-DDTHH:mm:00".to_string());
+    }
+    let days_in_month = match month {
+        2 if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) => 29,
+        2 => 28,
+        4 | 6 | 9 | 11 => 30,
+        _ => 31,
+    };
+    if day == 0 || day > days_in_month {
+        return Err("start_at must use YYYY-MM-DDTHH:mm:00".to_string());
     }
     Ok(())
 }
@@ -108,17 +138,20 @@ fn schedule_args(schedule: &ScheduleSpec) -> Result<Vec<String>, String> {
                 run_at.clone(),
             ])
         }
-        ScheduleSpec::Daily { time } => {
-            validate_time(time)?;
+        ScheduleSpec::Daily { start_at } => {
+            validate_datetime(start_at)?;
             Ok(vec![
                 "/SC".to_string(),
                 "DAILY".to_string(),
                 "/ST".to_string(),
-                time.clone(),
+                start_at[11..16].to_string(),
             ])
         }
-        ScheduleSpec::Weekly { day_of_week, time } => {
-            validate_time(time)?;
+        ScheduleSpec::Weekly {
+            start_at,
+            day_of_week,
+        } => {
+            validate_datetime(start_at)?;
             if *day_of_week > 6 {
                 return Err("day_of_week must be between 0 and 6".to_string());
             }
@@ -131,10 +164,10 @@ fn schedule_args(schedule: &ScheduleSpec) -> Result<Vec<String>, String> {
                 "/D".to_string(),
                 day_name.to_string(),
                 "/ST".to_string(),
-                time.clone(),
+                start_at[11..16].to_string(),
             ])
         }
-        ScheduleSpec::Interval { every, unit } => {
+        ScheduleSpec::Interval { every, unit, .. } => {
             if *every == 0 || (unit != "minutes" && unit != "hours") {
                 return Err("invalid interval".to_string());
             }
@@ -258,7 +291,7 @@ mod tests {
             working_directory: "C:\\Scripts".to_string(),
             log_directory: "C:\\Logs".to_string(),
             schedule: ScheduleSpec::Daily {
-                time: "08:30".to_string(),
+                start_at: "2026-08-14T08:30:00".to_string(),
             },
         })
         .unwrap();
@@ -295,15 +328,15 @@ mod tests {
     #[test]
     fn builds_weekly_command_with_day_names() {
         let args = schedule_args(&ScheduleSpec::Weekly {
+            start_at: "2026-08-14T08:00:00".to_string(),
             day_of_week: 0,
-            time: "08:00".to_string(),
         })
         .unwrap();
         let d_index = args.iter().position(|arg| arg == "/D").unwrap();
         assert_eq!(args[d_index + 1], "SUN");
         let args_sat = schedule_args(&ScheduleSpec::Weekly {
+            start_at: "2026-08-14T08:00:00".to_string(),
             day_of_week: 6,
-            time: "08:00".to_string(),
         })
         .unwrap();
         let d_index_sat = args_sat.iter().position(|arg| arg == "/D").unwrap();
@@ -320,7 +353,7 @@ mod tests {
             working_directory: "C:\\Scripts".to_string(),
             log_directory: "C:\\Logs".to_string(),
             schedule: ScheduleSpec::Daily {
-                time: "08:30".to_string(),
+                start_at: "2026-08-14T08:30:00".to_string(),
             },
         })
         .unwrap();

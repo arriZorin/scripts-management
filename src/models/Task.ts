@@ -9,9 +9,9 @@ export type TaskStatus =
 
 export type Schedule =
   | { type: 'once'; runAt: string }
-  | { type: 'daily'; startDate: string; time: string }
-  | { type: 'weekly'; startDate: string; dayOfWeek: 0 | 1 | 2 | 3 | 4 | 5 | 6; time: string }
-  | { type: 'interval'; startDate: string; every: number; unit: 'minutes' | 'hours' }
+  | { type: 'daily'; startAt: string }
+  | { type: 'weekly'; startAt: string; dayOfWeek: 0 | 1 | 2 | 3 | 4 | 5 | 6 }
+  | { type: 'interval'; startAt: string; every: number; unit: 'minutes' | 'hours' }
 
 export interface Task {
   id: string
@@ -31,15 +31,14 @@ export interface Task {
 export type TaskInput = Omit<Task, 'id' | 'lastRunAt' | 'nextRunAt' | 'status' | 'createdAt' | 'updatedAt'>
 export type TaskPatch = Partial<Omit<Task, 'id' | 'createdAt' | 'updatedAt'>>
 
-export function isValidTime(time: string): boolean {
-  return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time)
-}
-
-export function isValidDate(date: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false
+export function isValidDateTime(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(value)) return false
+  const [date, time] = value.split('T')
   const [year, month, day] = date.split('-').map(Number)
   const parsed = new Date(Date.UTC(year, month - 1, day))
-  return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day
+  if (parsed.getUTCFullYear() !== year || parsed.getUTCMonth() !== month - 1 || parsed.getUTCDate() !== day) return false
+  const [hour, minute, second] = time.split(':').map(Number)
+  return hour <= 23 && minute <= 59 && second <= 59
 }
 
 export function todayDateString(): string {
@@ -52,9 +51,9 @@ export function todayDateString(): string {
 
 export function isValidSchedule(schedule: Schedule): boolean {
   if (schedule.type === 'once') return !Number.isNaN(Date.parse(schedule.runAt))
-  if (!isValidDate(schedule.startDate)) return false
-  if (schedule.type === 'daily') return isValidTime(schedule.time)
-  if (schedule.type === 'weekly') return schedule.dayOfWeek >= 0 && schedule.dayOfWeek <= 6 && isValidTime(schedule.time)
+  if (!isValidDateTime(schedule.startAt)) return false
+  if (schedule.type === 'daily') return true
+  if (schedule.type === 'weekly') return schedule.dayOfWeek >= 0 && schedule.dayOfWeek <= 6
   return Number.isInteger(schedule.every) && schedule.every > 0 && (schedule.unit === 'minutes' || schedule.unit === 'hours')
 }
 

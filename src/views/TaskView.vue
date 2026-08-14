@@ -57,7 +57,7 @@ function emptyForm(): TaskInput {
     scriptId: scripts[0]?.id ?? '',
     interpreter: 'python',
     arguments: [],
-    schedule: { type: 'daily', startDate: todayDateString(), time: '08:00' },
+    schedule: { type: 'daily', startAt: `${todayDateString()}T08:00:00` },
     enabled: true,
   }
 }
@@ -131,26 +131,38 @@ function closeForm() {
 
 function updateScheduleType(type: Schedule['type']) {
   if (type === 'once') form.value.schedule = { type, runAt: new Date(Date.now() + 3600000).toISOString() }
-  if (type === 'daily') form.value.schedule = { type, startDate: todayDateString(), time: '08:00' }
-  if (type === 'weekly') form.value.schedule = { type, startDate: todayDateString(), dayOfWeek: 1, time: '08:00' }
-  if (type === 'interval') form.value.schedule = { type, startDate: todayDateString(), every: 1, unit: 'hours' }
+  if (type === 'daily') form.value.schedule = { type, startAt: `${todayDateString()}T08:00:00` }
+  if (type === 'weekly') form.value.schedule = { type, startAt: `${todayDateString()}T08:00:00`, dayOfWeek: 1 }
+  if (type === 'interval') form.value.schedule = { type, startAt: `${todayDateString()}T08:00:00`, every: 1, unit: 'hours' }
 }
 
 function onStartDateChange(event: Event) {
   const value = (event.target as { value?: string }).value
   if (!value) return
   const schedule = form.value.schedule
-  if (schedule.type === 'daily') form.value.schedule = { ...schedule, startDate: value }
-  if (schedule.type === 'weekly') form.value.schedule = { ...schedule, startDate: value }
-  if (schedule.type === 'interval') form.value.schedule = { ...schedule, startDate: value }
+  if (schedule.type === 'once') return
+  const time = schedule.startAt.slice(11, 16)
+  form.value.schedule = { ...schedule, startAt: `${value}T${time}:00` }
+}
+
+function onStartTimeChange(event: Event) {
+  const value = (event.target as { value?: string }).value
+  if (!value) return
+  const schedule = form.value.schedule
+  if (schedule.type === 'once') return
+  form.value.schedule = { ...schedule, startAt: `${schedule.startAt.slice(0, 10)}T${value}:00` }
 }
 
 function scheduleStartDate(): string {
   const schedule = form.value.schedule
-  if (schedule.type === 'daily') return schedule.startDate
-  if (schedule.type === 'weekly') return schedule.startDate
-  if (schedule.type === 'interval') return schedule.startDate
-  return ''
+  if (schedule.type === 'once') return ''
+  return schedule.startAt.slice(0, 10)
+}
+
+function scheduleStartTime(): string {
+  const schedule = form.value.schedule
+  if (schedule.type === 'once') return ''
+  return schedule.startAt.slice(11, 16)
 }
 
 async function save() {
@@ -259,9 +271,9 @@ function errorText(cause: unknown, fallback: string): string {
 
 function scheduleLabel(schedule: Schedule): string {
   if (schedule.type === 'once') return `Once: ${schedule.runAt}`
-  if (schedule.type === 'daily') return `Daily from ${schedule.startDate}: ${schedule.time}`
-  if (schedule.type === 'weekly') return `Weekly from ${schedule.startDate}: ${schedule.dayOfWeek} ${schedule.time}`
-  return `Every ${schedule.every} ${schedule.unit} from ${schedule.startDate}`
+  if (schedule.type === 'daily') return `Daily from ${schedule.startAt}`
+  if (schedule.type === 'weekly') return `Weekly from ${schedule.startAt}: ${schedule.dayOfWeek}`
+  return `Every ${schedule.every} ${schedule.unit} from ${schedule.startAt}`
 }
 
 onMounted(() => {
@@ -348,7 +360,7 @@ onMounted(() => {
           <input :value="form.arguments.join(' ')" class="input input-bordered w-full" data-testid="arguments-input" placeholder="--format json" @input="form.arguments = (($event.target as HTMLInputElement).value.trim() ? ($event.target as HTMLInputElement).value.trim().split(/\s+/) : [])" />
           <label class="label">Schedule</label>
           <select :value="form.schedule.type" class="select select-bordered w-full" data-testid="schedule-type-select" @change="updateScheduleType(($event.target as HTMLSelectElement).value as Schedule['type'])"><option value="once">Once</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="interval">Interval</option></select>
-          <label v-if="form.schedule.type !== 'once'" class="label mt-2">Start date</label>
+          <label v-if="form.schedule.type !== 'once'" class="label mt-2">Start date & time</label>
           <div v-if="form.schedule.type !== 'once'" class="relative">
             <button popoverTarget="start-date-popover" class="input input-bordered w-full text-left" data-testid="start-date-trigger" style="anchorName:--start-date-trigger" type="button">{{ scheduleStartDate() }}</button>
             <div popover id="start-date-popover" class="dropdown bg-base-100 rounded-box shadow-lg" style="positionAnchor:--start-date-trigger">
@@ -358,6 +370,7 @@ onMounted(() => {
                 <calendar-month></calendar-month>
               </calendar-date>
             </div>
+            <input :value="scheduleStartTime()" class="input input-bordered w-full mt-2" data-testid="start-time-input" type="time" @input="onStartTimeChange" />
           </div>
           <p v-if="error" class="alert alert-error mt-3">{{ error }}</p>
         </fieldset>

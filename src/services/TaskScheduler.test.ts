@@ -24,7 +24,7 @@ function task(overrides: Partial<Task> = {}): Task {
     scriptId: 'script-1',
     interpreter: 'python',
     arguments: ['--format', 'json'],
-    schedule: { type: 'daily', startDate: '2026-08-14', time: '08:00' },
+    schedule: { type: 'daily', startAt: '2026-08-14T08:00:00' },
     enabled: true,
     lastRunAt: null,
     nextRunAt: null,
@@ -55,7 +55,7 @@ describe('TauriTaskScheduler', () => {
       arguments: ['--format', 'json'],
       workingDirectory: 'C:/scripts',
       logDirectory: 'C:/AppData/logs',
-      schedule: { schedule_type: 'daily', value: '08:00', start_date: '2026-08-14' },
+      schedule: { schedule_type: 'daily', value: '', start_at: '2026-08-14T08:00:00' },
     })
   })
 
@@ -91,14 +91,14 @@ describe('TauriTaskScheduler', () => {
       schedule: { schedule_type: 'once', value: '2026-08-14T08:30:00.000Z' },
     }))
 
-    await new TauriTaskScheduler().create(task({ schedule: { type: 'weekly', startDate: '2026-08-14', dayOfWeek: 3, time: '09:15' } }), script)
+    await new TauriTaskScheduler().create(task({ schedule: { type: 'weekly', startAt: '2026-08-14T09:15:00', dayOfWeek: 3 } }), script)
     expect(mockedInvoke).toHaveBeenLastCalledWith('create_scheduled_task', expect.objectContaining({
-      schedule: { schedule_type: 'weekly', value: '09:15', day_of_week: 3, start_date: '2026-08-14' },
+      schedule: { schedule_type: 'weekly', value: '', day_of_week: 3, start_at: '2026-08-14T09:15:00' },
     }))
 
-    await new TauriTaskScheduler().create(task({ schedule: { type: 'interval', startDate: '2026-08-14', every: 2, unit: 'hours' } }), script)
+    await new TauriTaskScheduler().create(task({ schedule: { type: 'interval', startAt: '2026-08-14T08:00:00', every: 2, unit: 'hours' } }), script)
     expect(mockedInvoke).toHaveBeenLastCalledWith('create_scheduled_task', expect.objectContaining({
-      schedule: { schedule_type: 'interval', value: '', every: 2, unit: 'hours', start_date: '2026-08-14' },
+      schedule: { schedule_type: 'interval', value: '', every: 2, unit: 'hours', start_at: '2026-08-14T08:00:00' },
     }))
   })
 
