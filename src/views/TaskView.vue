@@ -185,7 +185,7 @@ function closeForm() {
 }
 
 function updateScheduleType(type: Schedule['type']) {
-  if (type === 'once') form.value.schedule = { type, runAt: new Date(Date.now() + 3600000).toISOString() }
+  if (type === 'once') form.value.schedule = { type, runAt: `${todayDateString()}T08:00:00` }
   if (type === 'daily') form.value.schedule = { type, startAt: `${todayDateString()}T08:00:00` }
   if (type === 'weekly') form.value.schedule = { type, startAt: `${todayDateString()}T08:00:00`, dayOfWeek: 1 }
   if (type === 'interval') form.value.schedule = { type, startAt: `${todayDateString()}T08:00:00`, every: 1, unit: 'hours' }
@@ -203,6 +203,39 @@ function scheduleStartDateTime(): string {
   const schedule = form.value.schedule
   if (schedule.type === 'once') return ''
   return schedule.startAt.slice(0, 16)
+}
+
+function onRunAtChange(event: Event) {
+  const value = (event.target as { value?: string }).value
+  if (!value) return
+  if (form.value.schedule.type !== 'once') return
+  form.value.schedule = { type: 'once', runAt: `${value}:00` }
+}
+
+function scheduleRunAt(): string {
+  const schedule = form.value.schedule
+  return schedule.type === 'once' ? schedule.runAt.slice(0, 16) : ''
+}
+
+function onEveryChange(event: Event) {
+  const value = Number((event.target as { value?: string }).value)
+  const schedule = form.value.schedule
+  if (schedule.type !== 'interval' || Number.isNaN(value)) return
+  form.value.schedule = { ...schedule, every: value }
+}
+
+function onUnitChange(event: Event) {
+  const value = (event.target as { value?: string }).value as 'minutes' | 'hours'
+  const schedule = form.value.schedule
+  if (schedule.type !== 'interval') return
+  form.value.schedule = { ...schedule, unit: value }
+}
+
+function onDayOfWeekChange(event: Event) {
+  const value = Number((event.target as { value?: string }).value)
+  const schedule = form.value.schedule
+  if (schedule.type !== 'weekly' || value < 0 || value > 6) return
+  form.value.schedule = { ...schedule, dayOfWeek: value as 0 | 1 | 2 | 3 | 4 | 5 | 6 }
 }
 
 async function save() {
@@ -414,8 +447,41 @@ onMounted(() => {
           <input :value="form.arguments.join(' ')" class="input input-bordered w-full" data-testid="arguments-input" placeholder="--format json" @input="form.arguments = (($event.target as HTMLInputElement).value.trim() ? ($event.target as HTMLInputElement).value.trim().split(/\s+/) : [])" />
           <label class="label">Schedule</label>
           <select :value="form.schedule.type" class="select select-bordered w-full" data-testid="schedule-type-select" @change="updateScheduleType(($event.target as HTMLSelectElement).value as Schedule['type'])"><option value="once">Once</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="interval">Interval</option></select>
-          <label v-if="form.schedule.type !== 'once'" class="label mt-2">Start date & time</label>
-          <input v-if="form.schedule.type !== 'once'" :value="scheduleStartDateTime()" class="input input-bordered w-full" data-testid="start-datetime-input" type="datetime-local" @input="onStartDateTimeChange" />
+
+          <template v-if="form.schedule.type === 'once'">
+            <label class="label mt-2">Run at</label>
+            <input :value="scheduleRunAt()" class="input input-bordered w-full" data-testid="run-at-input" type="datetime-local" @input="onRunAtChange" />
+          </template>
+
+          <template v-else>
+            <label class="label mt-2">Start date & time</label>
+            <input :value="scheduleStartDateTime()" class="input input-bordered w-full" data-testid="start-datetime-input" type="datetime-local" @input="onStartDateTimeChange" />
+          </template>
+
+          <template v-if="form.schedule.type === 'weekly'">
+            <label class="label mt-2">Day of week</label>
+            <select :value="form.schedule.type === 'weekly' ? form.schedule.dayOfWeek : ''" class="select select-bordered w-full" data-testid="day-of-week-select" @change="onDayOfWeekChange">
+              <option :value="0">Sunday</option>
+              <option :value="1">Monday</option>
+              <option :value="2">Tuesday</option>
+              <option :value="3">Wednesday</option>
+              <option :value="4">Thursday</option>
+              <option :value="5">Friday</option>
+              <option :value="6">Saturday</option>
+            </select>
+          </template>
+
+          <template v-if="form.schedule.type === 'interval'">
+            <label class="label mt-2">Repeat every</label>
+            <div class="flex gap-2">
+              <input :value="form.schedule.type === 'interval' ? form.schedule.every : ''" class="input input-bordered w-24" data-testid="interval-every-input" type="number" min="1" @input="onEveryChange" />
+              <select :value="form.schedule.type === 'interval' ? form.schedule.unit : 'hours'" class="select select-bordered flex-1" data-testid="interval-unit-select" @change="onUnitChange">
+                <option value="minutes">Minutes</option>
+                <option value="hours">Hours</option>
+              </select>
+            </div>
+          </template>
+
           <div v-if="error" class="alert alert-error mt-3" role="alert"><AlertIcon kind="error" /><span>{{ error }}</span></div>
         </fieldset>
         <div class="modal-action"><button class="btn btn-primary" data-testid="save-task-btn" @click="save">Save</button><button class="btn" data-testid="cancel-task-btn" @click="closeForm">Cancel</button></div>

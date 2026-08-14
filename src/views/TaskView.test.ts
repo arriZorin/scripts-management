@@ -652,6 +652,102 @@ it('applies a picked start datetime to the task schedule', async () => {
   app.unmount()
 })
 
+it('edits once schedule run-at datetime', async () => {
+  const repository = new FakeTaskRepository()
+  const { container, app } = mountView(repository)
+  await flush()
+  ;(container.querySelector('[data-testid="new-task-btn"]') as HTMLElement).click()
+  await flush()
+
+  const typeSelect = container.querySelector('[data-testid="schedule-type-select"]') as HTMLSelectElement
+  typeSelect.value = 'once'
+  typeSelect.dispatchEvent(new Event('change', { bubbles: true }))
+  await nextTick()
+
+  const runAt = container.querySelector('[data-testid="run-at-input"]') as HTMLInputElement
+  expect(runAt).toBeTruthy()
+  runAt.value = '2026-09-05T09:30'
+  runAt.dispatchEvent(new Event('input', { bubbles: true }))
+  await nextTick()
+
+  const name = container.querySelector('[data-testid="task-name-input"]') as HTMLInputElement
+  name.value = 'Once task'
+  name.dispatchEvent(new Event('input', { bubbles: true }))
+  ;(container.querySelector('[data-testid="save-task-btn"]') as HTMLElement).click()
+  await flush()
+
+  const saved = repository.items[0].schedule
+  expect(saved.type).toBe('once')
+  if (saved.type === 'once') expect(saved.runAt).toBe('2026-09-05T09:30:00')
+  app.unmount()
+})
+
+it('edits interval every and unit', async () => {
+  const repository = new FakeTaskRepository()
+  const { container, app } = mountView(repository)
+  await flush()
+  ;(container.querySelector('[data-testid="new-task-btn"]') as HTMLElement).click()
+  await flush()
+
+  const typeSelect = container.querySelector('[data-testid="schedule-type-select"]') as HTMLSelectElement
+  typeSelect.value = 'interval'
+  typeSelect.dispatchEvent(new Event('change', { bubbles: true }))
+  await nextTick()
+
+  const every = container.querySelector('[data-testid="interval-every-input"]') as HTMLInputElement
+  expect(every).toBeTruthy()
+  every.value = '30'
+  every.dispatchEvent(new Event('input', { bubbles: true }))
+  const unit = container.querySelector('[data-testid="interval-unit-select"]') as HTMLSelectElement
+  unit.value = 'minutes'
+  unit.dispatchEvent(new Event('change', { bubbles: true }))
+  await nextTick()
+
+  const name = container.querySelector('[data-testid="task-name-input"]') as HTMLInputElement
+  name.value = 'Interval task'
+  name.dispatchEvent(new Event('input', { bubbles: true }))
+  ;(container.querySelector('[data-testid="save-task-btn"]') as HTMLElement).click()
+  await flush()
+
+  const saved = repository.items[0].schedule
+  expect(saved.type).toBe('interval')
+  if (saved.type === 'interval') {
+    expect(saved.every).toBe(30)
+    expect(saved.unit).toBe('minutes')
+  }
+  app.unmount()
+})
+
+it('edits weekly day of week', async () => {
+  const repository = new FakeTaskRepository()
+  const { container, app } = mountView(repository)
+  await flush()
+  ;(container.querySelector('[data-testid="new-task-btn"]') as HTMLElement).click()
+  await flush()
+
+  const typeSelect = container.querySelector('[data-testid="schedule-type-select"]') as HTMLSelectElement
+  typeSelect.value = 'weekly'
+  typeSelect.dispatchEvent(new Event('change', { bubbles: true }))
+  await nextTick()
+
+  const dayOfWeek = container.querySelector('[data-testid="day-of-week-select"]') as HTMLSelectElement
+  expect(dayOfWeek).toBeTruthy()
+  dayOfWeek.value = '5'
+  dayOfWeek.dispatchEvent(new Event('change', { bubbles: true }))
+  await nextTick()
+
+  const name = container.querySelector('[data-testid="task-name-input"]') as HTMLInputElement
+  name.value = 'Weekly task'
+  name.dispatchEvent(new Event('input', { bubbles: true }))
+  ;(container.querySelector('[data-testid="save-task-btn"]') as HTMLElement).click()
+  await flush()
+
+  const saved = repository.items[0].schedule
+  expect(saved.type).toBe('weekly')
+  if (saved.type === 'weekly') expect(saved.dayOfWeek).toBe(5)
+  app.unmount()
+})
+
 it('records a failed run when Run Now errors', async () => {
   const runRepository = new FakeTaskRunRepository()
   const repository = new FakeTaskRepository()
