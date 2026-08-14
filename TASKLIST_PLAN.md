@@ -222,23 +222,34 @@ Implementation notes:
 
 2026-08-13: Run Now bug fixed and e2e-verified (see commit log). Both delegated workers timed out; parent took over all slices.
 
-## Phase 6 — Execution History
+## Phase 6 — Execution History ✅
 
-- [ ] Add TaskRun model
-- [ ] Store:
+- [x] Add TaskRun model
+- [x] Store:
   - Start time
   - Finish time
   - Status
   - Exit code
   - stdout
   - stderr
-- [ ] Add log directory configuration
-- [ ] Add task history panel
-- [ ] Add success/failure filters
-- [ ] Add clear-history action
-- [ ] Add repository tests
+- [x] Add log directory configuration
+- [x] Add task history panel
+- [x] Add success/failure filters
+- [x] Add clear-history action
+- [x] Add repository tests
 
-**Acceptance:** Each execution produces a visible history record and readable logs.
+**Acceptance:** Each execution produces a visible history record and readable logs. ✅ Verified 2026-08-14 on the release exe: a task created in the UI registered with a `cmd /c` action that redirects stdout/stderr into per-task log files; Run Now triggered real execution (Task Scheduler Last Result 0) and produced `ScriptsManagement-<id>.out.log` (`phase6-e2e stdout marker`) and `.err.log` (`phase6-e2e stderr warning`); `task-runs.json` records every run (startedAt/finishedAt/status/exitCode/stdout/stderr) and the Task page shows the history panel with All/Success/Failed filters, status badges, exit codes, output, and a Clear History confirm modal.
+
+Implementation notes:
+
+- Rust `create_task` wraps the interpreter action in `cmd.exe /c` and redirects `1>`/`2>` to `<logdir>\<stem>.out.log` / `.err.log` (stem = task name with separators replaced). The COM action path is `C:\Windows\System32\cmd.exe`; `exec_action_parts` is a pure builder, unit-tested.
+- `get_task_run_result` returns `{ last_run_at (unix), last_result, stdout_log, stderr_log }` via `get_LastRunTime`/`get_LastTaskResult`; log paths are app-data-relative (`logs/...`) so the frontend can read them with `read_text_file`.
+- Frontend: `TaskRun` model + `JsonTaskRunRepository` (`task-runs.json`, capped at 200), `TaskRunRecorder` (recordStart returns the run; recordFailure finalizes it; finalizePending reconciles running runs against Task Scheduler status + last result + log files; all fail-closed so history never breaks the task flow).
+- TaskView history panel: newest-first table with Task/Status/Started/Finished/Exit Code/Output columns, All/Success/Failed filters, Clear History confirm modal, Refresh; Run Now records start immediately and finalizes on load.
+- **Bug found in e2e**: COM Task Scheduler defaults to `DisallowStartIfOnBatteries=true` — on a laptop running on battery, tasks stay `Queued` forever (Last Result 0, never execute, no logs). Fixed by setting `put_DisallowStartIfOnBatteries(0)` and `put_StopIfGoingOnBatteries(0)` in `create_task`. Verified with a real COM integration test (`cargo test -- --ignored battery_task_executes_and_writes_stdout_log`): task registered with battery allowed, executed on battery, stdout log written with the marker, then cleaned up.
+- e2e note: task created before the battery fix (e.g. `phase6 e2e`) must be edited once in the UI to re-register with the new settings; Run Now on a battery-blocked task shows SUCCESS (queued) but does not execute until the task is re-registered or AC power is used.
+
+2026-08-14: Phase 6 implemented as 5 slices (Rust redirect + run-result, TaskRun model/repo, TaskRunRecorder, history UI, battery fix + real COM integration test), each committed green; full suite 131/131 + build green; cargo 27/27 (+1 ignored integration test).
 
 ## Phase 7 — Reliability and Recovery
 
