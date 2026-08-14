@@ -58,6 +58,23 @@ pub fn log_file_stem(task_name: &str) -> String {
     task_name.replace('\\', "-").replace('/', "-")
 }
 
+/// Returns the app-data-relative stdout/stderr log paths for a task. The
+/// frontend reads logs via `read_text_file`, which only accepts paths
+/// relative to the app data directory, so the payload uses `logs/...`
+/// instead of the absolute log directory.
+pub fn relative_log_paths(log_directory: &str, task_name: &str) -> (String, String) {
+    let dir_name = std::path::Path::new(log_directory)
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
+    let stem = log_file_stem(task_name);
+    (
+        format!("{}\\{}.out.log", dir_name, stem),
+        format!("{}\\{}.err.log", dir_name, stem),
+    )
+}
+
 /// Converts an OLE Automation DATE (days since 1899-12-30) to Unix seconds.
 pub fn ole_date_to_unix_seconds(date: f64) -> i64 {
     ((date - 25569.0) * 86400.0).round() as i64
@@ -567,9 +584,9 @@ pub struct TaskRunResult {
     pub last_run_at: Option<i64>,
     /// Exit code (HRESULT/LONG) of the last run, when available.
     pub last_result: Option<i32>,
-    /// Absolute path of the stdout log file for this task.
+    /// App-data-relative path of the stdout log file for this task.
     pub stdout_log: String,
-    /// Absolute path of the stderr log file for this task.
+    /// App-data-relative path of the stderr log file for this task.
     pub stderr_log: String,
 }
 
@@ -601,12 +618,12 @@ pub fn task_run_result(task_name: &str, log_directory: &str) -> Result<TaskRunRe
         format!("failed to query last result of '{}'", task_name)
     );
 
-    let stem = log_file_stem(task_name);
+    let (stdout_log, stderr_log) = relative_log_paths(log_directory, task_name);
     Ok(TaskRunResult {
         last_run_at: (last_run > 0.0).then(|| ole_date_to_unix_seconds(last_run)),
         last_result: Some(last_result),
-        stdout_log: format!("{}\\{}.out.log", log_directory, stem),
-        stderr_log: format!("{}\\{}.err.log", log_directory, stem),
+        stdout_log,
+        stderr_log,
     })
 }
 
@@ -694,6 +711,19 @@ mod tests {
             "ScriptsManagement\\task-1",
         );
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn run_result_log_paths_are_relative_to_app_data_dir() {
+        // The frontend reads logs via read_text_file, which only accepts
+        // paths relative to the app data directory, so the payload must
+        // return relative paths (logs/...), not absolute ones.
+        let (stdout_log, stderr_log) = relative_log_paths(
+            "C:\\Users\\me\\AppData\\Roaming\\com.tauri-app\\logs",
+            "ScriptsManagement\\task-1",
+        );
+        assert_eq!(stdout_log, "logs\\ScriptsManagement-task-1.out.log");
+        assert_eq!(stderr_log, "logs\\ScriptsManagement-task-1.err.log");
     }
 
     #[test]
