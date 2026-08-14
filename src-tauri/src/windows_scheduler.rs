@@ -612,12 +612,24 @@ pub fn run_task(task_name: &str) -> Result<String, String> {
 }
 
 /// Keeps only task names under the app's `ScriptsManagement\` namespace.
-/// COM returns full paths (possibly with a leading `\`), so the prefix is
-/// matched after trimming separators. Pure so it is unit-testable.
+/// COM returns full paths (possibly with a leading `\`), or bare task names
+/// when enumerating the `ScriptsManagement` subfolder directly; both are
+/// normalized to `ScriptsManagement\<name>`. Pure so it is unit-testable.
 pub fn managed_task_names(names: Vec<String>) -> Vec<String> {
     names
         .into_iter()
         .map(|name| name.trim_start_matches('\\').to_string())
+        .map(|name| {
+            if name.starts_with("ScriptsManagement\\") {
+                name
+            } else if !name.contains('\\') {
+                // Bare name from enumerating the ScriptsManagement subfolder.
+                format!("ScriptsManagement\\{}", name)
+            } else {
+                // Foreign path (other namespace) — dropped by the filter.
+                name
+            }
+        })
         .filter(|name| name.starts_with("ScriptsManagement\\"))
         .collect()
 }
@@ -625,13 +637,29 @@ pub fn managed_task_names(names: Vec<String>) -> Vec<String> {
 /// Lists the names of all registered tasks in the app's namespace through
 /// the native Task Scheduler API. Used by the frontend to reconcile JSON
 /// tasks with their Windows registrations.
+///
+/// Tasks are registered as `ScriptsManagement\<id>`, and Task Scheduler
+/// treats the backslash as a folder separator — they live in the
+/// `ScriptsManagement` subfolder, NOT the root. Enumerating the root
+/// (`GetTasks` on `\`) finds nothing, which made every task look missing.
+/// The subfolder is enumerated instead, and `get_Path` (full path) is read
+/// so names come back namespace-qualified.
 pub fn list_scheduled_tasks() -> Result<Vec<String>, String> {
     let connection = connect()?;
     let folder = root_folder(&connection)?;
 
-    let mut collection: *mut IRegisteredTaskCollection = ptr::null_mut();
-    let hr = unsafe { (*folder).GetTasks(0, &mut collection) };
+    // Open the app's subfolder; a missing folder means no managed tasks.
+    let managed_path = wide("\\ScriptsManagement");
+    let mut managed_folder: *mut ITaskFolder = ptr::null_mut();
+    let hr = unsafe { (*folder).GetFolder(managed_path.as_ptr() as *mut u16, &mut managed_folder) };
     unsafe { (*folder).Release() };
+    if hr < 0 {
+        return Ok(Vec::new());
+    }
+
+    let mut collection: *mut IRegisteredTaskCollection = ptr::null_mut();
+    let hr = unsafe { (*managed_folder).GetTasks(0, &mut collection) };
+    unsafe { (*managed_folder).Release() };
     check_hr!(hr, "failed to enumerate scheduled tasks");
 
     let mut count: LONG = 0;
@@ -655,7 +683,7 @@ pub fn list_scheduled_tasks() -> Result<Vec<String>, String> {
             continue;
         }
         let mut name: BSTR = ptr::null_mut();
-        let hr = unsafe { (*registered).get_Name(&mut name) };
+        let hr = unsafe { (*registered).get_Path(&mut name) };
         unsafe { (*registered).Release() };
         if hr >= 0 && !name.is_null() {
             names.push(bstr_to_string(name));
@@ -958,6 +986,7 @@ mod tests {
             "ScriptsManagement\\task-1".to_string(),
             "ScriptsManagement\\task-2".to_string(),
             "\\ScriptsManagement\\task-3".to_string(),
+            "task-4".to_string(),
             "Other\\task".to_string(),
             "Windows\\Update".to_string(),
         ]);
@@ -967,6 +996,9 @@ mod tests {
                 "ScriptsManagement\\task-1".to_string(),
                 "ScriptsManagement\\task-2".to_string(),
                 "ScriptsManagement\\task-3".to_string(),
+                // Bare names come from enumerating the ScriptsManagement
+                // subfolder; they must be normalized into the namespace.
+                "ScriptsManagement\\task-4".to_string(),
             ]
         );
         assert!(managed_task_names(vec![]).is_empty());
@@ -980,6 +1012,42 @@ mod tests {
         assert_eq!(task_state_name(TASK_STATE_READY), "ready");
         assert_eq!(task_state_name(TASK_STATE_RUNNING), "running");
         assert_eq!(task_state_name(999), "unknown");
+    }
+
+    /// Real Task Scheduler integration: verifies `list_scheduled_tasks`
+    /// enumerates tasks registered as `ScriptsManagement\<id>` (which live
+    /// in the ScriptsManagement SUBFOLDER, not the root — the bug that made
+    /// every task look missing). Gated `#[ignore]`; run with
+    /// `cargo test -- --ignored`.
+    #[test]
+    #[ignore]
+    fn list_scheduled_tasks_finds_tasks_in_managed_subfolder() {
+        let task_name = "ScriptsManagement\\p7-list-probe";
+        let _ = delete_task(task_name); // clean any previous probe
+
+        // A minimal Once task registered through the production COM path.
+        let spec = CreateTaskSpec {
+            task_name: task_name.to_string(),
+            interpreter: "C:\\Windows\\System32\\cmd.exe".to_string(),
+            script_path: "C:\\Windows\\System32\\cmd.exe".to_string(),
+            arguments: vec![],
+            working_directory: "C:\\Windows\\System32".to_string(),
+            log_directory: std::env::temp_dir().to_string_lossy().to_string(),
+            schedule: ScheduleSpec::Once {
+                run_at: "2099-01-01T00:00:00".to_string(),
+            },
+        };
+        create_task(&spec).unwrap();
+
+        let names = list_scheduled_tasks().unwrap();
+        assert!(
+            names.iter().any(|name| name == task_name),
+            "expected {} in {:?}",
+            task_name,
+            names
+        );
+
+        let _ = delete_task(task_name);
     }
 
     /// Real Task Scheduler integration: creates a task through the production
