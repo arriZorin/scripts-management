@@ -399,7 +399,12 @@ pub fn create_task(spec: &CreateTaskSpec) -> Result<String, String> {
         return Err(format!("failed to set task author: 0x{hr:08x}"));
     }
 
-    // Settings: start when available (matches the schtasks-created behavior).
+    // Settings: start when available, and run on battery power. The COM
+    // Task Scheduler defaults to DisallowStartIfOnBatteries=true, which
+    // silently keeps tasks queued forever on laptops running on battery —
+    // a scheduled-script manager must run its scripts regardless of power
+    // source (verified empirically: task stayed Queued, LastResult 0, no
+    // execution on a discharging battery).
     let mut settings: *mut ITaskSettings = ptr::null_mut();
     let hr = unsafe { (*task).get_Settings(&mut settings) };
     if hr < 0 {
@@ -408,11 +413,25 @@ pub fn create_task(spec: &CreateTaskSpec) -> Result<String, String> {
         return Err(format!("failed to get task settings: 0x{hr:08x}"));
     }
     let hr = unsafe { (*settings).put_StartWhenAvailable(-1i16) };
+    if hr < 0 {
+        unsafe { (*settings).Release() };
+        unsafe { (*task).Release() };
+        unsafe { (*folder).Release() };
+        return Err(format!("failed to set task settings: 0x{hr:08x}"));
+    }
+    let hr = unsafe { (*settings).put_DisallowStartIfOnBatteries(0i16) };
+    if hr < 0 {
+        unsafe { (*settings).Release() };
+        unsafe { (*task).Release() };
+        unsafe { (*folder).Release() };
+        return Err(format!("failed to allow battery start: 0x{hr:08x}"));
+    }
+    let hr = unsafe { (*settings).put_StopIfGoingOnBatteries(0i16) };
     unsafe { (*settings).Release() };
     if hr < 0 {
         unsafe { (*task).Release() };
         unsafe { (*folder).Release() };
-        return Err(format!("failed to set task settings: 0x{hr:08x}"));
+        return Err(format!("failed to allow battery continuation: 0x{hr:08x}"));
     }
 
     // Trigger.
