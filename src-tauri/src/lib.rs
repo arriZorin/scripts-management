@@ -217,7 +217,7 @@ fn create_scheduled_task(
     script_path: String,
     arguments: Vec<String>,
     working_directory: String,
-    _log_directory: String,
+    log_directory: String,
     schedule: SchedulePayload,
 ) -> Result<String, String> {
     let schedule = schedule_from_payload(schedule)?;
@@ -229,6 +229,7 @@ fn create_scheduled_task(
             script_path,
             arguments,
             working_directory,
+            log_directory,
             schedule,
         });
     }
@@ -253,7 +254,7 @@ fn update_scheduled_task(
     script_path: String,
     arguments: Vec<String>,
     working_directory: String,
-    _log_directory: String,
+    log_directory: String,
     schedule: SchedulePayload,
 ) -> Result<String, String> {
     let schedule = schedule_from_payload(schedule)?;
@@ -267,6 +268,7 @@ fn update_scheduled_task(
             script_path,
             arguments,
             working_directory,
+            log_directory,
             schedule,
         });
     }
@@ -314,6 +316,23 @@ fn get_scheduled_task_status(task_name: String) -> Result<String, String> {
     scheduler::execute_command(scheduler::build_status_command(&task_name)?)
 }
 
+#[tauri::command]
+fn get_task_run_result(
+    state: tauri::State<'_, AppDataDir>,
+    task_name: String,
+) -> Result<windows_scheduler::TaskRunResult, String> {
+    #[cfg(windows)]
+    {
+        let dir = log_dir(&state.0)?;
+        return windows_scheduler::task_run_result(&task_name, &dir.to_string_lossy());
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = state;
+        Err("task run results are only available on Windows".to_string())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -330,6 +349,7 @@ pub fn run() {
             set_scheduled_task_enabled,
             run_scheduled_task,
             get_scheduled_task_status,
+            get_task_run_result,
             resolve_interpreter_path,
             get_log_directory,
             get_app_mode

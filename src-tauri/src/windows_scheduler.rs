@@ -11,6 +11,7 @@ use std::ptr;
 
 use winapi::ctypes::c_void;
 use winapi::shared::winerror::RPC_E_CHANGED_MODE;
+use winapi::shared::wtypes::DATE;
 use winapi::um::combaseapi::{CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL};
 use winapi::um::oaidl::VARIANT;
 use winapi::um::objbase::COINIT_APARTMENTTHREADED;
@@ -23,6 +24,7 @@ use winapi::um::taskschd::{
     TASK_STATE_RUNNING, TASK_STATE_UNKNOWN, TASK_TRIGGER_DAILY, TASK_TRIGGER_TIME,
     TASK_TRIGGER_WEEKLY,
 };
+use winapi::um::winnt::LONG;
 use winapi::{Class, Interface};
 
 use crate::scheduler::ScheduleSpec;
@@ -46,7 +48,66 @@ pub struct CreateTaskSpec {
     pub script_path: String,
     pub arguments: Vec<String>,
     pub working_directory: String,
+    pub log_directory: String,
     pub schedule: ScheduleSpec,
+}
+
+/// Maps a task name (e.g. `ScriptsManagement\\<id>`) to a log file stem by
+/// replacing path separators, so the per-task log files are safe filenames.
+pub fn log_file_stem(task_name: &str) -> String {
+    task_name.replace('\\', "-").replace('/', "-")
+}
+
+/// Converts an OLE Automation DATE (days since 1899-12-30) to Unix seconds.
+pub fn ole_date_to_unix_seconds(date: f64) -> i64 {
+    ((date - 25569.0) * 86400.0).round() as i64
+}
+
+/// Validates that a value is an absolute Windows path with safe characters.
+fn validate_absolute_path(value: &str, label: &str) -> Result<(), String> {
+    validate_text(value, label)?;
+    let bytes = value.as_bytes();
+    if !(bytes.len() >= 3 && bytes[1] == b':' && (bytes[2] == b'\\' || bytes[2] == b'/')) {
+        return Err(format!("{} must be absolute", label));
+    }
+    Ok(())
+}
+
+/// Builds the exec action (program path, arguments) that runs the script
+/// through `cmd.exe /c` and redirects stdout/stderr into per-task log files
+/// inside the log directory. Pure so it is unit-testable without COM.
+///
+/// The arguments follow the `cmd /c ""...""` quoting convention: the whole
+/// command is wrapped in one pair of quotes, and each path/argument is
+/// individually quoted. Because `validate_text` rejects shell metacharacters
+/// in all inputs, the embedded values cannot break out of the wrapper.
+pub fn exec_action_parts(
+    interpreter: &str,
+    script_path: &str,
+    arguments: &[String],
+    log_directory: &str,
+    task_name: &str,
+) -> Result<(String, String), String> {
+    validate_absolute_path(interpreter, "interpreter")?;
+    validate_absolute_path(script_path, "script_path")?;
+    validate_absolute_path(log_directory, "log_directory")?;
+    for argument in arguments {
+        validate_text(argument, "argument")?;
+    }
+    let stem = log_file_stem(task_name);
+    let stdout_log = format!("{}\\{}.out.log", log_directory, stem);
+    let stderr_log = format!("{}\\{}.err.log", log_directory, stem);
+
+    let mut command = format!("\"{}\" \"{}\"", interpreter, script_path);
+    for argument in arguments {
+        command.push_str(&format!(" \"{}\"", argument));
+    }
+    command.push_str(&format!(" 1> \"{}\" 2> \"{}\"", stdout_log, stderr_log));
+
+    Ok((
+        "C:\\Windows\\System32\\cmd.exe".to_string(),
+        format!("/c \"{}\"", command),
+    ))
 }
 
 fn validate_text(value: &str, label: &str) -> Result<(), String> {
@@ -284,6 +345,15 @@ pub fn create_task(spec: &CreateTaskSpec) -> Result<String, String> {
     for argument in &spec.arguments {
         validate_text(argument, "argument")?;
     }
+    // Build the cmd.exe action up front (pure): stdout/stderr are redirected
+    // into per-task log files inside the log directory.
+    let (action_path, action_arguments) = exec_action_parts(
+        &spec.interpreter,
+        &spec.script_path,
+        &spec.arguments,
+        &spec.log_directory,
+        &spec.task_name,
+    )?;
 
     let connection = connect()?;
     let folder = root_folder(&connection)?;
@@ -338,7 +408,7 @@ pub fn create_task(spec: &CreateTaskSpec) -> Result<String, String> {
     }
     unsafe { (*trigger).Release() };
 
-    // Action: run interpreter with script path, arguments, working directory.
+    // Action: run the interpreter through cmd.exe (parts built above).
     let mut actions: *mut IActionCollection = ptr::null_mut();
     let hr = unsafe { (*task).get_Actions(&mut actions) };
     if hr < 0 {
@@ -369,8 +439,8 @@ pub fn create_task(spec: &CreateTaskSpec) -> Result<String, String> {
         return Err(format!("failed to query exec action: 0x{hr:08x}"));
     }
 
-    let interpreter_wide = wide(&spec.interpreter);
-    let hr = unsafe { (*exec).put_Path(interpreter_wide.as_ptr() as *mut u16) };
+    let path_wide = wide(&action_path);
+    let hr = unsafe { (*exec).put_Path(path_wide.as_ptr() as *mut u16) };
     if hr < 0 {
         unsafe { (*exec).Release() };
         unsafe { (*task).Release() };
@@ -378,8 +448,7 @@ pub fn create_task(spec: &CreateTaskSpec) -> Result<String, String> {
         return Err(format!("failed to set action path: 0x{hr:08x}"));
     }
 
-    let arguments = spec.arguments.join(" ");
-    let arguments_wide = wide(&arguments);
+    let arguments_wide = wide(&action_arguments);
     let hr = unsafe { (*exec).put_Arguments(arguments_wide.as_ptr() as *mut u16) };
     if hr < 0 {
         unsafe { (*exec).Release() };
@@ -491,6 +560,56 @@ pub fn task_status(task_name: &str) -> Result<String, String> {
     Ok(task_state_name(state).to_string())
 }
 
+/// Result payload for the last execution of a scheduled task.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct TaskRunResult {
+    /// Unix seconds of the last run, when the task has run at least once.
+    pub last_run_at: Option<i64>,
+    /// Exit code (HRESULT/LONG) of the last run, when available.
+    pub last_result: Option<i32>,
+    /// Absolute path of the stdout log file for this task.
+    pub stdout_log: String,
+    /// Absolute path of the stderr log file for this task.
+    pub stderr_log: String,
+}
+
+/// Queries the last execution info (run time + exit code) of a task plus its
+/// per-task log file paths through the native API.
+pub fn task_run_result(task_name: &str, log_directory: &str) -> Result<TaskRunResult, String> {
+    validate_text(task_name, "task_name")?;
+    validate_absolute_path(log_directory, "log_directory")?;
+    let connection = connect()?;
+    let folder = root_folder(&connection)?;
+
+    let task_name_wide = wide(task_name);
+    let mut registered: *mut IRegisteredTask = ptr::null_mut();
+    let hr = unsafe { (*folder).GetTask(task_name_wide.as_ptr() as *mut u16, &mut registered) };
+    unsafe { (*folder).Release() };
+    check_hr!(hr, format!("failed to open scheduled task '{}'", task_name));
+
+    let mut last_run: DATE = 0.0;
+    let hr = unsafe { (*registered).get_LastRunTime(&mut last_run) };
+    let mut last_result: LONG = 0;
+    let hr_result = unsafe { (*registered).get_LastTaskResult(&mut last_result) };
+    unsafe { (*registered).Release() };
+    check_hr!(
+        hr,
+        format!("failed to query last run time of '{}'", task_name)
+    );
+    check_hr!(
+        hr_result,
+        format!("failed to query last result of '{}'", task_name)
+    );
+
+    let stem = log_file_stem(task_name);
+    Ok(TaskRunResult {
+        last_run_at: (last_run > 0.0).then(|| ole_date_to_unix_seconds(last_run)),
+        last_result: Some(last_result),
+        stdout_log: format!("{}\\{}.out.log", log_directory, stem),
+        stderr_log: format!("{}\\{}.err.log", log_directory, stem),
+    })
+}
+
 /// Enables or disables a scheduled task.
 pub fn set_enabled(task_name: &str, enabled: bool) -> Result<String, String> {
     validate_text(task_name, "task_name")?;
@@ -523,6 +642,58 @@ mod tests {
         assert!(validate_text("task&name", "task_name").is_err());
         assert!(validate_text("task|name", "task_name").is_err());
         assert!(validate_text("ScriptsManagement\\bill", "task_name").is_ok());
+    }
+
+    #[test]
+    fn log_file_stem_replaces_separators() {
+        assert_eq!(
+            log_file_stem("ScriptsManagement\\task-1"),
+            "ScriptsManagement-task-1"
+        );
+        assert_eq!(log_file_stem("task.1"), "task.1");
+    }
+
+    #[test]
+    fn ole_date_epoch_is_1899_12_30() {
+        // OLE DATE 25569.0 == 1970-01-01T00:00:00Z (days from 1899-12-30).
+        assert_eq!(ole_date_to_unix_seconds(25569.0), 0);
+        // One day later.
+        assert_eq!(ole_date_to_unix_seconds(25570.0), 86400);
+        // 2026-08-14T00:00:00Z == 46248.0 OLE DATE.
+        assert_eq!(ole_date_to_unix_seconds(46248.0), 1786665600);
+    }
+
+    #[test]
+    fn exec_action_parts_redirects_stdout_and_stderr_into_log_dir() {
+        let (path, args) = exec_action_parts(
+            "C:\\Python312\\python.exe",
+            "C:\\Scripts\\backup.py",
+            &["--output".to_string(), "C:\\Backup Folder".to_string()],
+            "C:\\AppData\\logs",
+            "ScriptsManagement\\task-1",
+        )
+        .unwrap();
+        assert_eq!(path.to_lowercase(), "c:\\windows\\system32\\cmd.exe");
+        assert!(args.contains("C:\\Python312\\python.exe"));
+        assert!(args.contains("C:\\Scripts\\backup.py"));
+        assert!(args.contains("C:\\Backup Folder"));
+        assert!(args.contains("1>"));
+        assert!(args.contains("2>"));
+        assert!(args.contains("C:\\AppData\\logs\\ScriptsManagement-task-1.out.log"));
+        assert!(args.contains("C:\\AppData\\logs\\ScriptsManagement-task-1.err.log"));
+        assert!(args.starts_with("/c \"\""));
+    }
+
+    #[test]
+    fn exec_action_parts_rejects_unsafe_arguments() {
+        let result = exec_action_parts(
+            "C:\\Python312\\python.exe",
+            "C:\\Scripts\\backup.py",
+            &["--output".to_string(), "a&b".to_string()],
+            "C:\\AppData\\logs",
+            "ScriptsManagement\\task-1",
+        );
+        assert!(result.is_err());
     }
 
     #[test]
@@ -582,6 +753,7 @@ mod tests {
             script_path: "C:\\Scripts\\backup.py".to_string(),
             arguments: vec!["--output".to_string(), "C:\\Backup Folder".to_string()],
             working_directory: "C:\\Scripts".to_string(),
+            log_directory: "C:\\AppData\\logs".to_string(),
             schedule: ScheduleSpec::Daily {
                 time: "08:30".to_string(),
             },
