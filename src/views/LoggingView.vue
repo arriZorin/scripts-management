@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import AlertIcon from '../components/icons/AlertIcon.vue'
+import { useAutoDismiss } from '../composables/useAutoDismiss'
 import type { LogEntry } from '../models/LogEntry'
 import type { LogRepository } from '../services/LogRepository'
 import { JsonLogRepository } from '../services/JsonLogRepository'
@@ -15,6 +16,8 @@ const logRepository = props.logRepository ?? new JsonLogRepository(new TauriFile
 const logs = ref<LogEntry[]>([])
 const stats = ref<{ count: number; createdDate: string } | null>(null)
 const clearTarget = ref(false)
+const feedback = ref('')
+useAutoDismiss(feedback)
 
 async function load() {
   try {
@@ -36,6 +39,7 @@ async function confirmClear() {
   clearTarget.value = false
   await logRepository.clear()
   await load()
+  feedback.value = 'Logs cleared.'
 }
 
 onMounted(load)
@@ -57,6 +61,7 @@ onMounted(load)
       </div>
     </header>
     <main class="region body card p-4 m-2 rounded border border-gray-300 bg-white min-h-[200px] dark:bg-[#333333] dark:border-[#404040]">
+      <div v-if="feedback" class="alert alert-success mb-3" data-testid="log-feedback" role="alert"><AlertIcon kind="success" /><span>{{ feedback }}</span></div>
       <div v-if="logs.length === 0" class="alert alert-info" data-testid="log-empty-state" role="alert"><AlertIcon kind="info" /><span>No logs yet.</span></div>
       <table v-else class="table table-zebra w-full" data-testid="log-table">
         <thead><tr><th>Time</th><th>Mode</th><th>Level</th><th>Source</th><th>Message</th><th>Duration</th></tr></thead>

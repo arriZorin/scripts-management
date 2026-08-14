@@ -118,6 +118,7 @@ describe('LoggingView', () => {
     expect(repository.items).toHaveLength(0)
     expect(container.querySelector('[data-testid="log-empty-state"]')).toBeTruthy()
     expect(container.querySelector('[data-testid="log-stats"]')).toBeNull()
+    expect(container.querySelector('[data-testid="log-feedback"]')?.textContent).toContain('Logs cleared')
     app.unmount()
   })
 
