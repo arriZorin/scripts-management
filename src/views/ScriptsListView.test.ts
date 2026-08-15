@@ -100,6 +100,7 @@ function mountView(repo: FakeScriptRepository, picker: FakeScriptPicker, scanner
     scanner: scanner as never,
     taskRepository: taskRepository as never,
     taskScheduler: taskScheduler as never,
+    scriptPathChecker: { exists: async () => true },
   }))
   app.mount(container)
   return { container, app, taskRepository, taskScheduler }
@@ -204,16 +205,16 @@ describe('ScriptsListView', () => {
     const firstRowCells = Array.from(rows[0].querySelectorAll('td')).map(td => td.textContent)
     const secondRowCells = Array.from(rows[1].querySelectorAll('td')).map(td => td.textContent)
     expect(firstRowCells).toContain('x.py')
-    expect(firstRowCells).toContain('C:/a/x.py')
+    expect(firstRowCells[1]).toContain('C:/a/x.py')
     // First 3 cells should be: name, path, type - the 4th is created date which varies
     expect(firstRowCells[0]).toBe('x.py')
-    expect(firstRowCells[1]).toBe('C:/a/x.py')
+    expect(firstRowCells[1]).toContain('C:/a/x.py')
     expect(firstRowCells[2]).toBe('python')
     expect(firstRowCells[3]).toBeTruthy()
     expect(secondRowCells).toContain('y.py')
-    expect(secondRowCells).toContain('C:/a/y.py')
+    expect(secondRowCells[1]).toContain('C:/a/y.py')
     expect(secondRowCells[0]).toBe('y.py')
-    expect(secondRowCells[1]).toBe('C:/a/y.py')
+    expect(secondRowCells[1]).toContain('C:/a/y.py')
     expect(secondRowCells[2]).toBe('python')
     expect(secondRowCells[3]).toBeTruthy()
 
@@ -420,6 +421,40 @@ describe('ScriptsListView', () => {
 
     expect(repo.items).toHaveLength(1)
     expect(container.querySelector('[data-testid="delete-error"]')?.textContent).toContain('Access is denied')
+    app.unmount()
+  })
+
+  it('marks missing paths on mount and rechecks them on Refresh without deleting the script', async () => {
+    const repo = new FakeScriptRepository([{
+      id: 'missing-1',
+      name: 'missing.py',
+      path: 'C:/scripts/missing.py',
+      type: 'python',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    }])
+    let available = false
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const app = createApp(ScriptsListView)
+    app.provide(appContextKey, createAppContext({
+      scriptRepository: repo as never,
+      picker: new FakeScriptPicker() as never,
+      scanner: new FakeFileScanner() as never,
+      scriptPathChecker: { exists: async () => available },
+    }))
+    app.mount(container)
+    await flush()
+
+    expect(container.querySelector('[data-testid="missing-script-missing-1"]')).not.toBeNull()
+    expect(repo.items).toHaveLength(1)
+
+    available = true
+    ;(container.querySelector('[data-testid="refresh-btn"]') as HTMLElement).click()
+    await flush()
+
+    expect(container.querySelector('[data-testid="missing-script-missing-1"]')).toBeNull()
+    expect(repo.items).toHaveLength(1)
 
     app.unmount()
   })

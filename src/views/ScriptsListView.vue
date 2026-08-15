@@ -30,7 +30,10 @@
         <tbody>
           <tr v-for="s in scripts" :key="s.id">
             <td>{{ s.name }}</td>
-            <td>{{ s.path }}</td>
+            <td>
+              {{ s.path }}
+              <span v-if="missingScriptIds.includes(s.id)" class="badge badge-warning ml-2" :data-testid="`missing-script-${s.id}`">Missing</span>
+            </td>
             <td><span class="badge badge-info">{{ s.type }}</span></td>
             <td :title="s.createdAt"><RelativeTime :date="s.createdAt" /></td>
             <td>
@@ -125,6 +128,7 @@ import AlertIcon from '../components/icons/AlertIcon.vue';
 import { useAppContext } from '../composables/useAppContext';
 import { useAutoDismiss } from '../composables/useAutoDismiss';
 import { useScripts } from '../services/scriptImport/useScripts';
+import { findMissingScriptIds } from '../services/scriptReconciliation';
 import { onMounted } from 'vue';
 import type { Script } from '../models/Script';
 import type { Task } from '../models/Task';
@@ -140,9 +144,15 @@ const RelativeTime = defineComponent({
   },
 });
 
-const { scriptRepository: repository, picker, scanner, taskRepository, taskScheduler } = useAppContext();
+const { scriptRepository: repository, picker, scanner, taskRepository, taskScheduler, scriptPathChecker } = useAppContext();
 
 const { scripts, error, busy, addScriptFile, addScriptFolder, load } = useScripts({ repository, picker, scanner });
+const missingScriptIds = ref<string[]>([]);
+
+async function loadAndReconcile() {
+  await load();
+  missingScriptIds.value = await findMissingScriptIds(scripts.value, scriptPathChecker.exists);
+}
 
 const operationSummary = ref('');
 useAutoDismiss(error);
@@ -194,7 +204,7 @@ async function saveEdit() {
       name: trimmedName,
       description: editDescription.value.trim(),
     });
-    await load();
+    await loadAndReconcile();
     closeEditDialog();
     operationSummary.value = `Updated ${trimmedName}.`;
   } catch (e) {
@@ -235,7 +245,7 @@ async function confirmDelete() {
       await taskScheduler.delete(task.id);
     }
     await repository.delete(target.id);
-    await load();
+    await loadAndReconcile();
 
     operationSummary.value = linkedTasks.value.length > 0
       ? `Deleted ${target.name} and ${linkedTasks.value.length} linked task(s).`
@@ -260,10 +270,10 @@ async function handleAddFolder() {
 }
 
 async function handleRefresh() {
-  await load();
+  await loadAndReconcile();
 }
 
 onMounted(async () => {
-  await load();
+  await loadAndReconcile();
 });
 </script>

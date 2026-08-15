@@ -181,6 +181,18 @@ fn write_text_file(
     fs::write(&full_path, &content).map_err(|e| format!("failed to write file: {}", e))
 }
 
+#[tauri::command]
+fn path_exists(path: String) -> Result<bool, String> {
+    if path.is_empty() {
+        return Err("path cannot be empty".to_string());
+    }
+    if !Path::new(&path).is_absolute() && !is_absolute_windows_path(&path) {
+        return Err("path must be absolute".to_string());
+    }
+
+    Ok(Path::new(&path).is_file())
+}
+
 #[derive(Deserialize)]
 struct SchedulePayload {
     schedule_type: String,
@@ -357,6 +369,7 @@ pub fn run() {
             scan_files,
             read_text_file,
             write_text_file,
+            path_exists,
             create_scheduled_task,
             update_scheduled_task,
             delete_scheduled_task,
@@ -539,6 +552,30 @@ mod tests {
         let result = crate::find_in_path("python3.exe", &[dir.to_string_lossy().to_string()]);
         assert_eq!(result, Some(fake.to_string_lossy().to_string()));
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_path_exists_reports_files_and_missing_paths() {
+        let dir = create_temp_dir("path-exists");
+        let existing = dir.join("script.py");
+        fs::write(&existing, "print('ok')").unwrap();
+
+        assert!(crate::path_exists(existing.to_string_lossy().to_string()).unwrap());
+        assert!(!crate::path_exists(dir.join("missing.py").to_string_lossy().to_string()).unwrap());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_path_exists_rejects_empty_and_relative_paths() {
+        assert_eq!(
+            crate::path_exists("".to_string()).unwrap_err(),
+            "path cannot be empty"
+        );
+        assert_eq!(
+            crate::path_exists("scripts/run.py".to_string()).unwrap_err(),
+            "path must be absolute"
+        );
     }
 
     #[test]
