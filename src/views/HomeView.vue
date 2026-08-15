@@ -35,16 +35,30 @@ const stats = ref<DashboardStats>({
   failedRuns: 0,
   successRate: 0,
 });
+const tasks = ref<Task[]>([]);
+const recentRuns = ref<TaskRun[]>([]);
 const loaded = ref(false);
 
 async function loadStats() {
-  const [scripts, tasks, runs]: [Script[], Task[], TaskRun[]] = await Promise.all([
+  const [scripts, loadedTasks, runs]: [Script[], Task[], TaskRun[]] = await Promise.all([
     scriptRepository.list().catch(() => [] as Script[]),
     taskRepository.list().catch(() => [] as Task[]),
     taskRunRepository.list().catch(() => [] as TaskRun[]),
   ]);
-  stats.value = computeDashboardStats(scripts, tasks, runs);
+  tasks.value = loadedTasks;
+  recentRuns.value = [...runs]
+    .sort((left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt))
+    .slice(0, 5);
+  stats.value = computeDashboardStats(scripts, loadedTasks, runs);
   loaded.value = true;
+}
+
+function taskName(taskId: string) {
+  return tasks.value.find((task) => task.id === taskId)?.name ?? taskId;
+}
+
+function formatRunDate(value: string | null) {
+  return value ? new Date(value).toLocaleString() : '-';
 }
 
 onMounted(loadStats);
@@ -97,6 +111,26 @@ onMounted(loadStats);
               <div class="stat-desc text-secondary">{{ stats.successRuns }} of {{ stats.totalRuns }} runs succeeded</div>
             </button>
           </div>
+          <section class="mt-6" data-testid="recent-executions">
+            <h2 class="mb-3 text-lg font-semibold">Recent Executions</h2>
+            <div v-if="recentRuns.length === 0" class="alert alert-info" data-testid="recent-executions-empty" role="alert">
+              <span>No executions yet.</span>
+            </div>
+            <table v-else class="table table-zebra w-full" data-testid="recent-executions-table">
+              <thead>
+                <tr><th>Task</th><th>Status</th><th>Started</th><th>Finished</th><th>Exit Code</th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="run in recentRuns" :key="run.id" :data-testid="`recent-execution-row-${run.id}`">
+                  <td>{{ taskName(run.taskId) }}</td>
+                  <td><span class="badge" :class="run.status === 'success' ? 'badge-success' : run.status === 'failed' ? 'badge-error' : 'badge-warning'">{{ run.status }}</span></td>
+                  <td>{{ formatRunDate(run.startedAt) }}</td>
+                  <td>{{ formatRunDate(run.finishedAt) }}</td>
+                  <td>{{ run.exitCode ?? '-' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
           <p v-if="loaded && stats.totalScripts === 0 && stats.totalTasks === 0" class="text-gray-500 mt-4">
             No scripts or tasks yet. Add a script from the Scripts List page to get started.
           </p>
