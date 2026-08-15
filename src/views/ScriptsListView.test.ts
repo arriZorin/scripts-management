@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { createApp, nextTick } from 'vue'
 import ScriptsListView from './ScriptsListView.vue'
+import { appContextKey, createAppContext } from '../composables/useAppContext'
 
 // Fake implementations for testing (no Tauri runtime needed)
 class FakeScriptRepository {
@@ -92,7 +93,14 @@ class FakeTaskScheduler {
 function mountView(repo: FakeScriptRepository, picker: FakeScriptPicker, scanner: FakeFileScanner, taskRepository = new FakeTaskRepository(), taskScheduler = new FakeTaskScheduler()) {
   const container = document.createElement('div')
   document.body.appendChild(container)
-  const app = createApp(ScriptsListView, { repository: repo, picker, scanner, taskRepository, taskScheduler })
+  const app = createApp(ScriptsListView)
+  app.provide(appContextKey, createAppContext({
+    scriptRepository: repo as never,
+    picker: picker as never,
+    scanner: scanner as never,
+    taskRepository: taskRepository as never,
+    taskScheduler: taskScheduler as never,
+  }))
   app.mount(container)
   return { container, app, taskRepository, taskScheduler }
 }

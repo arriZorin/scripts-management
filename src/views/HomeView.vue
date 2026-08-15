@@ -1,30 +1,19 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
+import { useAppContext } from '../composables/useAppContext';
 import type { Script } from '../models/Script';
 import type { Task } from '../models/Task';
 import type { TaskRun } from '../models/TaskRun';
-import type { ScriptRepository } from '../services/ScriptRepository';
-import type { TaskRepository } from '../services/TaskRepository';
-import type { TaskRunRepository } from '../services/TaskRunRepository';
 import { computeDashboardStats, type DashboardStats } from '../services/dashboardStats';
-import { TauriFileStorage } from '../services/TauriFileStorage';
-import { JsonScriptRepository } from '../services/JsonScriptRepository';
-import { JsonTaskRepository } from '../services/JsonTaskRepository';
-import { JsonTaskRunRepository } from '../services/JsonTaskRunRepository';
 
 interface Props {
-  scriptRepository?: ScriptRepository;
-  taskRepository?: TaskRepository;
-  taskRunRepository?: TaskRunRepository;
   onNavigate?: (viewId: string) => void;
 }
 
 const props = defineProps<Props>();
 const onNavigate = props.onNavigate;
 
-const scriptRepository = props.scriptRepository ?? new JsonScriptRepository(new TauriFileStorage(), 'scripts.json');
-const taskRepository = props.taskRepository ?? new JsonTaskRepository(new TauriFileStorage(), 'tasks.json', scriptRepository);
-const taskRunRepository = props.taskRunRepository ?? new JsonTaskRunRepository(new TauriFileStorage(), 'task-runs.json');
+const { scriptRepository, taskRepository, taskRunRepository } = useAppContext();
 
 const stats = ref<DashboardStats>({
   totalScripts: 0,

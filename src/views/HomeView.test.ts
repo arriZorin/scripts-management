@@ -1,6 +1,7 @@
 import { createApp, nextTick } from 'vue'
 import { describe, expect, it } from 'vitest'
 import HomeView from './HomeView.vue'
+import { appContextKey, createAppContext } from '../composables/useAppContext'
 import type { Task } from '../models/Task'
 import type { TaskRun } from '../models/TaskRun'
 
@@ -48,11 +49,12 @@ describe('HomeView recent executions', () => {
       run('run-6', 'task-2', '2026-08-14T06:00:00.000Z'),
     ]
 
-    const app = createApp(HomeView, {
+    const app = createApp(HomeView)
+    app.provide(appContextKey, createAppContext({
       scriptRepository: { list: async () => [] } as never,
       taskRepository: { list: async () => tasks } as never,
       taskRunRepository: { list: async () => runs } as never,
-    })
+    }))
     app.mount(container)
     for (let index = 0; index < 5; index += 1) {
       await nextTick()

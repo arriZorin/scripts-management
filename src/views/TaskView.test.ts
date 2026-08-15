@@ -1,6 +1,7 @@
 import { createApp, nextTick } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import TaskView from './TaskView.vue'
+import { appContextKey, createAppContext } from '../composables/useAppContext'
 import type { Script } from '../models/Script'
 import type { Task, TaskInput } from '../models/Task'
 import type { TaskRun } from '../models/TaskRun'
@@ -130,16 +131,16 @@ class FakeScriptRepository {
 function mountView(repository: FakeTaskRepository, executor = new FakeTaskExecutor(), scheduler = new FakeTaskScheduler(), logger = new FakeLogger(), runRepository = new FakeTaskRunRepository(), scriptRepository: FakeScriptRepository | null = null) {
   const container = document.createElement('div')
   document.body.appendChild(container)
-  const app = createApp(TaskView, {
-    taskRepository: repository,
-    taskExecutor: executor,
-    taskScheduler: scheduler,
-    logger,
+  const app = createApp(TaskView)
+  app.provide(appContextKey, createAppContext({
+    taskRepository: repository as never,
+    taskExecutor: executor as never,
+    taskScheduler: scheduler as never,
+    logger: logger as never,
     taskRunRepository: runRepository,
     taskRunRecorder: new TaskRunRecorder(runRepository),
-    scripts: [script],
-    scriptRepository: scriptRepository ?? undefined,
-  })
+    scriptRepository: (scriptRepository ?? new FakeScriptRepository()) as never,
+  }))
   app.mount(container)
   return { container, app, runRepository }
 }

@@ -1,6 +1,7 @@
 import { createApp, nextTick } from 'vue'
 import { describe, expect, it } from 'vitest'
 import LoggingView from './LoggingView.vue'
+import { appContextKey, createAppContext } from '../composables/useAppContext'
 import type { LogEntry } from '../models/LogEntry'
 
 class FakeLogRepository {
@@ -35,7 +36,8 @@ function entry(overrides: Partial<LogEntry> = {}): LogEntry {
 function mountView(repository: FakeLogRepository) {
   const container = document.createElement('div')
   document.body.appendChild(container)
-  const app = createApp(LoggingView, { logRepository: repository })
+  const app = createApp(LoggingView)
+  app.provide(appContextKey, createAppContext({ logRepository: repository as never }))
   app.mount(container)
   return { container, app }
 }

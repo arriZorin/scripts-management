@@ -2,17 +2,10 @@
 import { onMounted, ref } from 'vue'
 import AlertIcon from '../components/icons/AlertIcon.vue'
 import { useAutoDismiss } from '../composables/useAutoDismiss'
+import { useAppContext } from '../composables/useAppContext'
 import type { LogEntry } from '../models/LogEntry'
-import type { LogRepository } from '../services/LogRepository'
-import { JsonLogRepository } from '../services/JsonLogRepository'
-import { TauriFileStorage } from '../services/TauriFileStorage'
 
-interface Props {
-  logRepository?: LogRepository
-}
-
-const props = defineProps<Props>()
-const logRepository = props.logRepository ?? new JsonLogRepository(new TauriFileStorage(), 'logs.json')
+const { logRepository } = useAppContext()
 const logs = ref<LogEntry[]>([])
 const stats = ref<{ count: number; createdDate: string } | null>(null)
 const clearTarget = ref(false)

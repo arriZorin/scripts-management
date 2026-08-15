@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted } from 'vue';
 import { useNavigation } from './composables/useNavigation';
+import { createAppContext, provideAppContext } from './composables/useAppContext';
 import HomeView from './views/HomeView.vue';
 import ScriptsListView from './views/ScriptsListView.vue';
 import TaskView from './views/TaskView.vue';
@@ -12,13 +13,7 @@ import TaskIcon from './components/icons/TaskIcon.vue';
 import LoggingIcon from './components/icons/LoggingIcon.vue';
 import SettingIcon from './components/icons/SettingIcon.vue';
 import type { Component } from 'vue';
-import type { Script } from './models/Script';
-import { TauriFileStorage } from './services/TauriFileStorage';
-import { JsonScriptRepository } from './services/JsonScriptRepository';
-import { JsonTaskRepository } from './services/JsonTaskRepository';
-import { JsonLogRepository } from './services/JsonLogRepository';
 import { AppLogger } from './services/AppLogger';
-import { JsonTaskRunRepository } from './services/JsonTaskRunRepository';
 import type { LogRepository } from './services/LogRepository';
 import type { ScriptRepository } from './services/ScriptRepository';
 import type { TaskRepository } from './services/TaskRepository';
@@ -33,24 +28,10 @@ interface Props {
 }
 
 const props = defineProps<Props>();
+const appContext = createAppContext(props);
+provideAppContext(appContext);
 
 const { navItems, activeView, setView } = useNavigation();
-
-const scriptRepository = props.scriptRepository ?? new JsonScriptRepository(new TauriFileStorage(), 'scripts.json');
-const taskRepository = props.taskRepository ?? new JsonTaskRepository(new TauriFileStorage(), 'tasks.json', scriptRepository);
-const logRepository = props.logRepository ?? new JsonLogRepository(new TauriFileStorage(), 'logs.json');
-const logger = props.logger ?? new AppLogger(logRepository);
-const taskRunRepository = props.taskRunRepository ?? new JsonTaskRunRepository(new TauriFileStorage(), 'task-runs.json');
-
-const scripts = ref<Script[]>([]);
-
-async function loadScripts() {
-  try {
-    scripts.value = await scriptRepository.list();
-  } catch {
-    scripts.value = [];
-  }
-}
 
 const views = computed(() => {
   switch (activeView.value) {
@@ -78,8 +59,7 @@ const viewIcons: Record<string, Component> = {
 };
 
 onMounted(() => {
-  loadScripts();
-  logger.record('app', 'startup');
+  appContext.logger.record('app', 'startup');
 });
 </script>
 
@@ -105,7 +85,7 @@ onMounted(() => {
       </ul>
     </nav>
     <main class="main-content flex-1 p-4 overflow-y-auto">
-      <component :is="views" :task-repository="taskRepository" :scripts="scripts" :script-repository="scriptRepository" :logger="logger" :log-repository="logRepository" :task-run-repository="taskRunRepository" :on-navigate="setView" />
+      <component :is="views" :on-navigate="setView" />
     </main>
   </div>
 </template>

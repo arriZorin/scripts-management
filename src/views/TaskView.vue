@@ -1,51 +1,18 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import AlertIcon from '../components/icons/AlertIcon.vue'
+import { useAppContext } from '../composables/useAppContext'
 import { useAutoDismiss } from '../composables/useAutoDismiss'
 import type { Script } from '../models/Script'
 import type { IntervalUnit, Schedule, Task, TaskInput } from '../models/Task'
 import { INTERVAL_UNITS, todayDateString } from '../models/Task'
-import type { TaskRepository } from '../services/TaskRepository'
-import type { ScriptRepository } from '../services/ScriptRepository'
-import { TauriTaskExecutor } from '../services/TaskExecutor'
-import type { TaskExecutor } from '../services/TaskExecutor'
-import { TauriTaskScheduler } from '../services/TaskScheduler'
-import type { TaskScheduler } from '../services/TaskScheduler'
-import type { AppLogger } from '../services/AppLogger'
 import type { TaskRun, TaskRunStatus } from '../models/TaskRun'
-import type { TaskRunRepository } from '../services/TaskRunRepository'
-import { JsonTaskRunRepository } from '../services/JsonTaskRunRepository'
-import { TaskRunRecorder } from '../services/TaskRunRecorder'
-import { TauriFileStorage } from '../services/TauriFileStorage'
 import { listRegisteredTasks, reconcileTasks, repairMissingTasks } from '../services/TaskReconciler'
 import type { ReconcileResult } from '../services/TaskReconciler'
 import { errorMessage } from '../services/errorMessage'
 
-interface Props {
-  taskRepository?: TaskRepository
-  taskExecutor?: TaskExecutor
-  taskScheduler?: TaskScheduler
-  logger?: AppLogger
-  scripts?: Script[]
-  scriptRepository?: ScriptRepository
-  taskRunRepository?: TaskRunRepository
-  taskRunRecorder?: TaskRunRecorder
-}
-
-const props = defineProps<Props>()
-const scripts = ref<Script[]>(props.scripts ?? [])
-const scriptRepository = props.scriptRepository
-const taskRepository: TaskRepository = props.taskRepository ?? {
-  list: async () => [],
-  get: async () => null,
-  create: async (input) => ({ ...input, id: '', lastRunAt: null, nextRunAt: null, status: input.enabled ? 'scheduled' : 'disabled', createdAt: '', updatedAt: '' }),
-  update: async () => { throw new Error('Task repository is not configured') },
-  delete: async () => undefined,
-}
-const taskExecutor = props.taskExecutor ?? new TauriTaskExecutor()
-const taskScheduler: TaskScheduler = props.taskScheduler ?? new TauriTaskScheduler()
-const taskRunRepository: TaskRunRepository = props.taskRunRepository ?? new JsonTaskRunRepository(new TauriFileStorage(), 'task-runs.json')
-const taskRunRecorder = props.taskRunRecorder ?? new TaskRunRecorder(taskRunRepository)
+const { scriptRepository, taskRepository, taskExecutor, taskScheduler, logger, taskRunRepository, taskRunRecorder } = useAppContext()
+const scripts = ref<Script[]>([])
 const tasks = ref<Task[]>([])
 const isEditing = ref(false)
 const editingId = ref<string | null>(null)
@@ -272,11 +239,11 @@ async function save() {
     await load()
     const afterLoad = performance.now()
     const step = (name: string, at: number) => `${name}=${Math.round(at - started)}ms`
-    await props.logger?.record('task.create', `${editingId.value ? 'update' : 'create'} ${task.name} (${step('repo', afterRepo)} ${step('sched', afterScheduler)} ${step('load', afterLoad)})`, 'info', Math.round(afterLoad - started))
+    await logger?.record('task.create', `${editingId.value ? 'update' : 'create'} ${task.name} (${step('repo', afterRepo)} ${step('sched', afterScheduler)} ${step('load', afterLoad)})`, 'info', Math.round(afterLoad - started))
     closeForm()
   } catch (cause) {
     error.value = errorText(cause, 'Failed to save task.')
-    await props.logger?.record('task.create', `save ${form.value.name || 'task'} failed: ${error.value}`, 'error', Math.round(performance.now() - started))
+    await logger?.record('task.create', `save ${form.value.name || 'task'} failed: ${error.value}`, 'error', Math.round(performance.now() - started))
   }
 }
 
@@ -291,7 +258,7 @@ async function toggle(task: Task) {
     const afterSet = performance.now()
     await load()
     const afterLoad = performance.now()
-    await props.logger?.record(
+    await logger?.record(
       'task.toggle',
       `toggle ${updated.name}: ${updated.enabled ? 'enabled' : 'disabled'} (${step('update', afterUpdate)} ${step('set', afterSet)} ${step('load', afterLoad)})`,
       'info',
@@ -299,7 +266,7 @@ async function toggle(task: Task) {
     )
   } catch (cause) {
     operationError.value = errorText(cause, 'Failed to update task.')
-    await props.logger?.record('task.toggle', `toggle ${task.name} failed: ${operationError.value}`, 'error', Math.round(performance.now() - started))
+    await logger?.record('task.toggle', `toggle ${task.name} failed: ${operationError.value}`, 'error', Math.round(performance.now() - started))
   }
 }
 
@@ -311,7 +278,7 @@ async function runTask(task: Task) {
   const run = await taskRunRecorder.recordStart(task.id)
   try {
     operationResult.value = await taskExecutor.run(task)
-    await props.logger?.record('task.run', `run ${task.name}: ${operationResult.value}`, 'info', Math.round(performance.now() - started))
+    await logger?.record('task.run', `run ${task.name}: ${operationResult.value}`, 'info', Math.round(performance.now() - started))
     await load()
     await loadRuns()
   } catch (cause) {
@@ -320,7 +287,7 @@ async function runTask(task: Task) {
     const message = rawErrorText(cause, 'Failed to run task.')
     operationError.value = message
     await taskRunRecorder.recordFailure(run, message)
-    await props.logger?.record('task.run', `run ${task.name} failed: ${message}`, 'error', Math.round(performance.now() - started))
+    await logger?.record('task.run', `run ${task.name} failed: ${message}`, 'error', Math.round(performance.now() - started))
   } finally {
     runningTaskId.value = null
   }
@@ -366,6 +333,7 @@ function scheduleLabel(schedule: Schedule): string {
 }
 
 onMounted(() => {
+  loadScripts()
   load()
   loadRuns()
 })

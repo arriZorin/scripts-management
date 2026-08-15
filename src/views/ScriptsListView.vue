@@ -122,14 +122,9 @@
 <script setup lang="ts">
 import { computed, defineComponent, ref } from 'vue';
 import AlertIcon from '../components/icons/AlertIcon.vue';
+import { useAppContext } from '../composables/useAppContext';
 import { useAutoDismiss } from '../composables/useAutoDismiss';
 import { useScripts } from '../services/scriptImport/useScripts';
-import { JsonScriptRepository } from '../services/JsonScriptRepository';
-import { JsonTaskRepository } from '../services/JsonTaskRepository';
-import { TauriTaskScheduler } from '../services/TaskScheduler';
-import { TauriFileStorage } from '../services/TauriFileStorage';
-import { TauriScriptPicker } from '../services/scriptImport/ScriptPicker';
-import { TauriFileScanner } from '../services/scriptImport/FileScanner';
 import { onMounted } from 'vue';
 import type { Script } from '../models/Script';
 import type { Task } from '../models/Task';
@@ -145,21 +140,7 @@ const RelativeTime = defineComponent({
   },
 });
 
-interface Props {
-  repository?: import('../services/ScriptRepository').ScriptRepository;
-  picker?: import('../services/scriptImport/ScriptPicker').ScriptPicker;
-  scanner?: import('../services/scriptImport/FileScanner').FileScanner;
-  taskRepository?: import('../services/TaskRepository').TaskRepository;
-  taskScheduler?: import('../services/TaskScheduler').TaskScheduler;
-}
-
-const props = defineProps<Props>();
-
-const repository = props.repository ?? new JsonScriptRepository(new TauriFileStorage(), 'scripts.json');
-const picker = props.picker ?? new TauriScriptPicker();
-const scanner = props.scanner ?? new TauriFileScanner();
-const taskRepository = props.taskRepository ?? new JsonTaskRepository(new TauriFileStorage(), 'tasks.json', repository);
-const taskScheduler = props.taskScheduler ?? new TauriTaskScheduler();
+const { scriptRepository: repository, picker, scanner, taskRepository, taskScheduler } = useAppContext();
 
 const { scripts, error, busy, addScriptFile, addScriptFolder, load } = useScripts({ repository, picker, scanner });
 
