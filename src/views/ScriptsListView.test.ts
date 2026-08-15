@@ -81,7 +81,14 @@ class FakeTaskRepository {
 
 class FakeTaskScheduler {
   public deletes: string[] = []
+  public updates: Array<{ taskId: string; scriptPath: string }> = []
   public error: unknown = null
+
+  update(task: any, script: any): Promise<void> {
+    if (this.error) return Promise.reject(this.error)
+    this.updates.push({ taskId: task.id, scriptPath: script.path })
+    return Promise.resolve()
+  }
 
   delete(id: string): Promise<void> {
     if (this.error) return Promise.reject(this.error)
@@ -484,7 +491,10 @@ describe('ScriptsListView', () => {
     }])
     const picker = new FakeScriptPicker()
     picker.fileResult = 'D:/new/backup.py'
-    const { container, app } = mountView(repo, picker, new FakeFileScanner(), new FakeTaskRepository(), new FakeTaskScheduler(), { exists: async (path) => path === 'D:/new/backup.py' })
+    const taskRepository = new FakeTaskRepository()
+    taskRepository.items = [{ id: 'task-repair-2', scriptId: 'repair-2' }]
+    const taskScheduler = new FakeTaskScheduler()
+    const { container, app } = mountView(repo, picker, new FakeFileScanner(), taskRepository, taskScheduler, { exists: async (path) => path === 'D:/new/backup.py' })
     await flush()
 
     ;(container.querySelector('[data-testid="repair-script-repair-2"]') as HTMLElement).click()
@@ -493,6 +503,7 @@ describe('ScriptsListView', () => {
     expect(repo.items).toHaveLength(1)
     expect(repo.items[0].id).toBe('repair-2')
     expect(repo.items[0].path).toBe('D:/new/backup.py')
+    expect(taskScheduler.updates).toEqual([{ taskId: 'task-repair-2', scriptPath: 'D:/new/backup.py' }])
     expect(container.querySelector('[data-testid="missing-script-repair-2"]')).toBeNull()
     app.unmount()
   })

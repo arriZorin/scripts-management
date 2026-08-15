@@ -357,7 +357,7 @@ onMounted(() => {
         <AlertIcon kind="warning" />
         <div class="flex flex-row items-center justify-between w-full gap-2">
           <span>{{ reconcile.missing.length }} task(s) missing from Windows scheduler{{ reconcile.orphaned.length > 0 ? `, ${reconcile.orphaned.length} orphaned registration(s)` : '' }}</span>
-          <button v-if="reconcile.missing.length > 0" class="btn btn-xs btn-warning" :disabled="repairing" data-testid="repair-tasks-btn" @click="repairTasks">{{ repairing ? 'Repairing...' : 'Repair' }}</button>
+          <button v-if="reconcile.missing.length > 0" class="btn btn-xs btn-warning" :disabled="repairing" data-testid="repair-tasks-btn" @click="repairTasks">{{ repairing ? 'Repairing...' : 'Repair All' }}</button>
         </div>
       </div>
       <div v-if="tasks.length === 0" class="alert alert-info" data-testid="task-empty-state" role="alert"><AlertIcon kind="info" /><span>No tasks yet.</span></div>

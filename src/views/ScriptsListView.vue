@@ -292,7 +292,11 @@ async function handleRepair(script: Script) {
   }
 
   try {
-    await repository.update(script.id, { path: selectedPath });
+    const updatedScript = await repository.update(script.id, { path: selectedPath });
+    const linkedTasks = (await taskRepository.list()).filter((task) => task.scriptId === script.id);
+    for (const task of linkedTasks) {
+      await taskScheduler.update(task, updatedScript);
+    }
     await loadAndReconcile();
     operationSummary.value = `Repaired ${script.name}.`;
   } catch (e) {
