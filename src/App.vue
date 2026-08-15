@@ -105,7 +105,7 @@ onMounted(() => {
       </ul>
     </nav>
     <main class="main-content flex-1 p-4 overflow-y-auto">
-      <component :is="views" :task-repository="taskRepository" :scripts="scripts" :script-repository="scriptRepository" :logger="logger" :log-repository="logRepository" :task-run-repository="taskRunRepository" />
+      <component :is="views" :task-repository="taskRepository" :scripts="scripts" :script-repository="scriptRepository" :logger="logger" :log-repository="logRepository" :task-run-repository="taskRunRepository" :on-navigate="setView" />
     </main>
   </div>
 </template>

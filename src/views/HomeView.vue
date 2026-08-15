@@ -16,9 +16,11 @@ interface Props {
   scriptRepository?: ScriptRepository;
   taskRepository?: TaskRepository;
   taskRunRepository?: TaskRunRepository;
+  onNavigate?: (viewId: string) => void;
 }
 
 const props = defineProps<Props>();
+const onNavigate = props.onNavigate;
 
 const scriptRepository = props.scriptRepository ?? new JsonScriptRepository(new TauriFileStorage(), 'scripts.json');
 const taskRepository = props.taskRepository ?? new JsonTaskRepository(new TauriFileStorage(), 'tasks.json', scriptRepository);
@@ -62,7 +64,7 @@ onMounted(loadStats);
       <slot name="body">
         <div class="card-body" data-testid="dashboard">
           <div class="stats shadow w-full" data-testid="dashboard-stats">
-            <div class="stat">
+            <button type="button" class="stat cursor-pointer border-0 bg-transparent text-left transition hover:bg-base-200 focus-visible:outline-2 focus-visible:outline-offset-2" data-testid="stat-scripts" aria-label="Open Scripts List" @click="onNavigate?.('scripts-list')">
               <div class="stat-figure text-primary">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block h-8 w-8 stroke-current">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -71,9 +73,9 @@ onMounted(loadStats);
               <div class="stat-title">Total Scripts</div>
               <div class="stat-value text-primary">{{ stats.totalScripts }}</div>
               <div class="stat-desc">Python scripts in the library</div>
-            </div>
+            </button>
 
-            <div class="stat">
+            <button type="button" class="stat cursor-pointer border-0 bg-transparent text-left transition hover:bg-base-200 focus-visible:outline-2 focus-visible:outline-offset-2" data-testid="stat-tasks" aria-label="Open Task" @click="onNavigate?.('task')">
               <div class="stat-figure text-secondary">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block h-8 w-8 stroke-current">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
@@ -82,9 +84,9 @@ onMounted(loadStats);
               <div class="stat-title">Total Tasks</div>
               <div class="stat-value text-secondary">{{ stats.totalTasks }}</div>
               <div class="stat-desc">{{ stats.enabledTasks }} enabled · {{ stats.totalTasks - stats.enabledTasks }} disabled</div>
-            </div>
+            </button>
 
-            <div class="stat">
+            <button type="button" class="stat cursor-pointer border-0 bg-transparent text-left transition hover:bg-base-200 focus-visible:outline-2 focus-visible:outline-offset-2" data-testid="stat-runs" aria-label="Open Logging" @click="onNavigate?.('logging')">
               <div class="stat-figure text-secondary">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block h-8 w-8 stroke-current">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -93,7 +95,7 @@ onMounted(loadStats);
               <div class="stat-value">{{ stats.totalRuns > 0 ? `${stats.successRate}%` : '—' }}</div>
               <div class="stat-title">Success rate</div>
               <div class="stat-desc text-secondary">{{ stats.successRuns }} of {{ stats.totalRuns }} runs succeeded</div>
-            </div>
+            </button>
           </div>
           <p v-if="loaded && stats.totalScripts === 0 && stats.totalTasks === 0" class="text-gray-500 mt-4">
             No scripts or tasks yet. Add a script from the Scripts List page to get started.

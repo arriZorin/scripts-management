@@ -169,6 +169,29 @@ describe('App', () => {
     document.body.removeChild(container);
   });
 
+  it.each([
+    ['stat-scripts', 'Manage your Python scripts'],
+    ['stat-tasks', 'Task management'],
+    ['stat-runs', 'Application logs'],
+  ])('clicking %s navigates to its corresponding page', async (statTestId, pageMarker) => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+
+    const app = createApp(App);
+    app.mount(container);
+    await nextTick();
+
+    const stat = container.querySelector(`[data-testid="${statTestId}"]`) as HTMLElement | null;
+    expect(stat).not.toBeNull();
+    stat?.click();
+    await nextTick();
+
+    expect(container.innerHTML).toContain(pageMarker);
+
+    app.unmount();
+    document.body.removeChild(container);
+  });
+
   it('records a startup log entry on mount', async () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
