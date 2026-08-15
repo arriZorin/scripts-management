@@ -15,6 +15,7 @@
       <div class="card-body">
         <div v-if="busy" class="alert alert-info text-gray-600" role="alert"><AlertIcon kind="info" /><span>Adding...</span></div>
         <div v-if="error" role="alert" class="alert alert-error text-red-600"><AlertIcon kind="error" /><span>{{ error }}</span></div>
+        <div v-if="repairError" data-testid="repair-error" role="alert" class="alert alert-error text-red-600"><AlertIcon kind="error" /><span>{{ repairError }}</span></div>
         <div v-if="summary" class="alert alert-info text-gray-600" role="alert"><AlertIcon kind="info" /><span>{{ summary }}</span></div>
       </div>
       <table data-testid="script-table" class="table table-zebra w-full text-sm">
@@ -40,6 +41,7 @@
               <div class="join">
                 <button @click="openEditDialog(s)" :data-testid="`edit-script-${s.id}`" class="btn btn-xs btn-neutral join-item" :title="`Edit ${s.name}`">✏️</button>
                 <button @click="handleDelete(s)" :data-testid="`delete-script-${s.id}`" class="btn btn-xs btn-neutral join-item" :title="`Delete ${s.name}`">🗑️</button>
+                <button v-if="missingScriptIds.includes(s.id)" @click="handleRepair(s)" :data-testid="`repair-script-${s.id}`" class="btn btn-xs btn-warning join-item" :title="`Repair ${s.name}`">Repair</button>
               </div>
             </td>
           </tr>
@@ -155,8 +157,10 @@ async function loadAndReconcile() {
 }
 
 const operationSummary = ref('');
+const repairError = ref('');
 useAutoDismiss(error);
 useAutoDismiss(operationSummary);
+useAutoDismiss(repairError);
 const summary = computed(() => operationSummary.value);
 
 // Edit state and refs
@@ -271,6 +275,29 @@ async function handleAddFolder() {
 
 async function handleRefresh() {
   await loadAndReconcile();
+}
+
+function fileName(path: string): string {
+  return path.replace(/\\/g, '/').split('/').pop() ?? path;
+}
+
+async function handleRepair(script: Script) {
+  repairError.value = '';
+  const selectedPath = await picker.pickFile();
+  if (!selectedPath) return;
+
+  if (fileName(selectedPath).toLowerCase() !== fileName(script.name).toLowerCase()) {
+    repairError.value = 'Script did not match';
+    return;
+  }
+
+  try {
+    await repository.update(script.id, { path: selectedPath });
+    await loadAndReconcile();
+    operationSummary.value = `Repaired ${script.name}.`;
+  } catch (e) {
+    repairError.value = e instanceof Error ? e.message : 'Failed to repair script.';
+  }
 }
 
 onMounted(async () => {

@@ -90,7 +90,7 @@ class FakeTaskScheduler {
   }
 }
 
-function mountView(repo: FakeScriptRepository, picker: FakeScriptPicker, scanner: FakeFileScanner, taskRepository = new FakeTaskRepository(), taskScheduler = new FakeTaskScheduler()) {
+function mountView(repo: FakeScriptRepository, picker: FakeScriptPicker, scanner: FakeFileScanner, taskRepository = new FakeTaskRepository(), taskScheduler = new FakeTaskScheduler(), scriptPathChecker: { exists: (path: string) => Promise<boolean> } = { exists: async () => true }) {
   const container = document.createElement('div')
   document.body.appendChild(container)
   const app = createApp(ScriptsListView)
@@ -100,7 +100,7 @@ function mountView(repo: FakeScriptRepository, picker: FakeScriptPicker, scanner
     scanner: scanner as never,
     taskRepository: taskRepository as never,
     taskScheduler: taskScheduler as never,
-    scriptPathChecker: { exists: async () => true },
+    scriptPathChecker,
   }))
   app.mount(container)
   return { container, app, taskRepository, taskScheduler }
@@ -456,6 +456,44 @@ describe('ScriptsListView', () => {
     expect(container.querySelector('[data-testid="missing-script-missing-1"]')).toBeNull()
     expect(repo.items).toHaveLength(1)
 
+    app.unmount()
+  })
+
+  it('rejects a repair file when its name does not match and keeps the original path', async () => {
+    const repo = new FakeScriptRepository([{
+      id: 'repair-1', name: 'backup.py', path: 'C:/old/backup.py', type: 'python',
+      createdAt: '2024-01-01T00:00:00.000Z', updatedAt: '2024-01-01T00:00:00.000Z',
+    }])
+    const picker = new FakeScriptPicker()
+    picker.fileResult = 'D:/new/other.py'
+    const { container, app } = mountView(repo, picker, new FakeFileScanner(), new FakeTaskRepository(), new FakeTaskScheduler(), { exists: async () => false })
+    await flush()
+
+    ;(container.querySelector('[data-testid="repair-script-repair-1"]') as HTMLElement).click()
+    await flush()
+
+    expect(container.querySelector('[data-testid="repair-error"]')?.textContent).toContain('Script did not match')
+    expect(repo.items[0].path).toBe('C:/old/backup.py')
+    app.unmount()
+  })
+
+  it('updates the existing script path by id when the repair file name matches', async () => {
+    const repo = new FakeScriptRepository([{
+      id: 'repair-2', name: 'backup.py', path: 'C:/old/backup.py', type: 'python',
+      createdAt: '2024-01-01T00:00:00.000Z', updatedAt: '2024-01-01T00:00:00.000Z',
+    }])
+    const picker = new FakeScriptPicker()
+    picker.fileResult = 'D:/new/backup.py'
+    const { container, app } = mountView(repo, picker, new FakeFileScanner(), new FakeTaskRepository(), new FakeTaskScheduler(), { exists: async (path) => path === 'D:/new/backup.py' })
+    await flush()
+
+    ;(container.querySelector('[data-testid="repair-script-repair-2"]') as HTMLElement).click()
+    await flush()
+
+    expect(repo.items).toHaveLength(1)
+    expect(repo.items[0].id).toBe('repair-2')
+    expect(repo.items[0].path).toBe('D:/new/backup.py')
+    expect(container.querySelector('[data-testid="missing-script-repair-2"]')).toBeNull()
     app.unmount()
   })
 })
