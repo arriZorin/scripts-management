@@ -173,7 +173,9 @@ async function flush() {
 beforeEach(() => {
   mockedInvoke.mockReset()
   mockedInvoke.mockImplementation((command: string) => {
-    if (command === 'list_scheduled_tasks') return Promise.resolve([])
+    // FakeTaskRepository gives every created task the id 'task-1', so treat
+    // it as registered by default; missing-task scenarios override below.
+    if (command === 'list_scheduled_tasks') return Promise.resolve(['ScriptsManagement\\task-1'])
     // Unknown commands reject like the unmocked Tauri bridge, so
     // TaskRunRecorder.finalizePending fail-closes and keeps runs 'running'.
     return Promise.reject(`unmocked command: ${command}`)
@@ -858,12 +860,27 @@ it('shows a per-row Repair action only for tasks missing from the scheduler', as
   const { container, app } = mountView(repository)
   await flush()
 
+  const rowA = container.querySelector('[data-testid="task-row-task-a"]')
+  const rowB = container.querySelector('[data-testid="task-row-task-b"]')
+  // Registered row: enabled status only, full actions, no repair.
+  expect(rowA?.querySelector('[data-testid="scheduler-missing-badge"]')).toBeNull()
+  expect(rowA?.textContent).toContain('Enabled')
   expect(container.querySelector('[data-testid="repair-task-task-a"]')).toBeNull()
-  expect(container.querySelector('[data-testid="repair-task-task-b"]')).toBeTruthy()
-  const badgeB = container.querySelector('[data-testid="task-row-task-b"] [data-testid="scheduler-missing-badge"]')
+  expect(container.querySelector('[data-testid="edit-task-task-a"]')).toBeTruthy()
+  expect(container.querySelector('[data-testid="toggle-task-task-a"]')).toBeTruthy()
+  expect(container.querySelector('[data-testid="run-task-task-a"]')).toBeTruthy()
+  expect(container.querySelector('[data-testid="delete-task-task-a"]')).toBeTruthy()
+  // Missing row: not-registered status only, repair + delete only.
+  const badgeB = rowB?.querySelector('[data-testid="scheduler-missing-badge"]')
   expect(badgeB).toBeTruthy()
-  expect(badgeB?.textContent).toContain('not registered')
-  expect(container.querySelector('[data-testid="task-row-task-a"] [data-testid="scheduler-missing-badge"]')).toBeNull()
+  expect(badgeB?.textContent).toContain('unregistered')
+  expect(rowB?.textContent).not.toContain('Enabled')
+  expect(rowB?.textContent).not.toContain('Disabled')
+  expect(container.querySelector('[data-testid="repair-task-task-b"]')).toBeTruthy()
+  expect(container.querySelector('[data-testid="delete-task-task-b"]')).toBeTruthy()
+  expect(container.querySelector('[data-testid="edit-task-task-b"]')).toBeNull()
+  expect(container.querySelector('[data-testid="toggle-task-task-b"]')).toBeNull()
+  expect(container.querySelector('[data-testid="run-task-task-b"]')).toBeNull()
   app.unmount()
 })
 
@@ -893,6 +910,10 @@ it('repairs a single missing task from its row', async () => {
   expect(scheduler.creates.map(created => created.id)).toEqual(['task-b'])
   expect(container.querySelector('[data-testid="task-operation-result"]')?.textContent).toContain('Repaired Missing')
   expect(container.querySelector('[data-testid="repair-task-task-b"]')).toBeNull()
+  // After repair the task is registered again: status + full actions return.
+  expect(container.querySelector('[data-testid="scheduler-missing-badge"]')).toBeNull()
+  expect(container.querySelector('[data-testid="edit-task-task-b"]')).toBeTruthy()
+  expect(container.querySelector('[data-testid="run-task-task-b"]')).toBeTruthy()
   app.unmount()
 })
 
