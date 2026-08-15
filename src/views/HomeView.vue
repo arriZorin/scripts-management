@@ -5,6 +5,7 @@ import type { Script } from '../models/Script';
 import type { Task } from '../models/Task';
 import type { TaskRun } from '../models/TaskRun';
 import { computeDashboardStats, type DashboardStats } from '../services/dashboardStats';
+import type { SystemInfo } from '../services/systemInfo';
 
 interface Props {
   onNavigate?: (viewId: string) => void;
@@ -13,7 +14,7 @@ interface Props {
 const props = defineProps<Props>();
 const onNavigate = props.onNavigate;
 
-const { scriptRepository, taskRepository, taskRunRepository } = useAppContext();
+const { scriptRepository, taskRepository, taskRunRepository, systemInfo: systemInfoService } = useAppContext();
 
 const stats = ref<DashboardStats>({
   totalScripts: 0,
@@ -26,19 +27,22 @@ const stats = ref<DashboardStats>({
 });
 const tasks = ref<Task[]>([]);
 const recentRuns = ref<TaskRun[]>([]);
+const systemInfo = ref<SystemInfo | null>(null);
 const loaded = ref(false);
 
 async function loadStats() {
-  const [scripts, loadedTasks, runs]: [Script[], Task[], TaskRun[]] = await Promise.all([
+  const [scripts, loadedTasks, runs, loadedSystemInfo]: [Script[], Task[], TaskRun[], SystemInfo | null] = await Promise.all([
     scriptRepository.list().catch(() => [] as Script[]),
     taskRepository.list().catch(() => [] as Task[]),
     taskRunRepository.list().catch(() => [] as TaskRun[]),
+    systemInfoService.load().catch(() => null),
   ]);
   tasks.value = loadedTasks;
   recentRuns.value = [...runs]
     .sort((left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt))
     .slice(0, 5);
   stats.value = computeDashboardStats(scripts, loadedTasks, runs);
+  systemInfo.value = loadedSystemInfo;
   loaded.value = true;
 }
 
@@ -100,6 +104,34 @@ onMounted(loadStats);
               <div class="stat-desc text-secondary">{{ stats.successRuns }} of {{ stats.totalRuns }} runs succeeded</div>
             </button>
           </div>
+          <div class="divider"></div>
+          <section class="card border border-base-300 bg-base-100 shadow-sm" data-testid="system-info">
+            <div class="card-body">
+              <div class="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <h2 class="card-title">System Info</h2>
+                  <p class="text-sm opacity-70">Host configuration compared with the app lock version.</p>
+                </div>
+                <span v-if="systemInfo?.status === 'matched'" class="badge badge-success">Matched</span>
+                <span v-else-if="systemInfo?.status === 'mismatch'" class="badge badge-warning">Mismatch</span>
+                <span v-else-if="systemInfo" class="badge badge-error">Unavailable</span>
+                <span v-else class="loading loading-spinner loading-sm" aria-label="Checking system info"></span>
+              </div>
+              <div class="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <div class="text-xs uppercase opacity-60">Host status</div>
+                  <div class="font-medium">{{ systemInfo?.hostVersion ?? 'Unable to read host version' }}</div>
+                </div>
+                <div>
+                  <div class="text-xs uppercase opacity-60">App lock version</div>
+                  <div class="font-medium">{{ systemInfo?.appVersion ?? 'Checking...' }}</div>
+                </div>
+              </div>
+              <div v-if="systemInfo && systemInfo.status !== 'matched'" class="card-actions justify-end">
+                <button type="button" class="btn btn-primary btn-sm" data-testid="resolve-system-info" @click="onNavigate?.('setting')">Resolve now</button>
+              </div>
+            </div>
+          </section>
           <div class="divider"></div>
           <section class="mt-6" data-testid="recent-executions">
             <h2 class="mb-3 text-lg font-semibold">Recent Executions</h2>

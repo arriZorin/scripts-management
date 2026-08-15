@@ -18,6 +18,7 @@ import { TauriFileScanner } from '../services/scriptImport/FileScanner'
 import { AppLogger } from '../services/AppLogger'
 import { TaskRunRecorder } from '../services/TaskRunRecorder'
 import { TauriFileStorage } from '../services/TauriFileStorage'
+import { tauriSystemInfoService, type SystemInfoService } from '../services/systemInfo'
 
 export interface AppContext {
   scriptRepository: ScriptRepository
@@ -30,6 +31,7 @@ export interface AppContext {
   taskRunRecorder: TaskRunRecorder
   picker: ScriptPicker
   scanner: FileScanner
+  systemInfo: SystemInfoService
 }
 
 export const appContextKey: InjectionKey<AppContext> = Symbol('appContext')
@@ -53,6 +55,7 @@ export function createAppContext(overrides: Partial<AppContext> = {}): AppContex
     taskRunRecorder: overrides.taskRunRecorder ?? new TaskRunRecorder(taskRunRepository),
     picker: overrides.picker ?? new TauriScriptPicker(),
     scanner: overrides.scanner ?? new TauriFileScanner(),
+    systemInfo: overrides.systemInfo ?? tauriSystemInfoService,
   }
 }
 

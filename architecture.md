@@ -127,7 +127,8 @@ scripts-management/
 │       ├── dashboardStats.ts
 │       ├── errorMessage.ts
 │       ├── LogService.ts
-│       └── AppLogger.ts
+│       ├── AppLogger.ts
+│       └── systemInfo.ts     # host/app version comparison service
 │
 └── src-tauri/
     ├── src/lib.rs           # Tauri commands and app-data helpers

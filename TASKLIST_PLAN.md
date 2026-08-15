@@ -288,8 +288,11 @@ Implementation notes:
 - [x] Add summary dashboard to the Home page (daisyUI `stats` cards)
 - [x] Pure `computeDashboardStats` aggregation (scripts, tasks, enabled, run success rate) + unit tests
 - [x] HomeView loads scripts/tasks/runs from the injected repositories on mount
+- [x] Add System Info card below the stat cards
+- [x] Compare the Tauri host version with the app lock version
+- [x] Show Resolve now only for mismatched/unavailable host status; navigate to Settings
 
-**Acceptance:** Home shows live counts for Total Scripts, Total Tasks (enabled/disabled), and run success rate, following the daisyUI stat-card reference.
+**Acceptance:** Home shows live counts for Total Scripts, Total Tasks (enabled/disabled), and run success rate, following the daisyUI stat-card reference. A System Info card shows host/app versions and hides Resolve now when they match.
 
 2026-08-14: Home dashboard implemented — `dashboardStats.ts` pure metric aggregation (totalScripts, totalTasks, enabledTasks, totalRuns, successRuns, failedRuns, successRate rounded, ignoring in-flight running runs), wired into `HomeView` via the repositories App already injects (taskRepository/taskRunRepository/scriptRepository). Follows the daisyUI `stats shadow` card layout from the reference.
 

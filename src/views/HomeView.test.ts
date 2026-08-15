@@ -4,6 +4,7 @@ import HomeView from './HomeView.vue'
 import { appContextKey, createAppContext } from '../composables/useAppContext'
 import type { Task } from '../models/Task'
 import type { TaskRun } from '../models/TaskRun'
+import type { SystemInfo } from '../services/systemInfo'
 
 function task(id: string, name: string): Task {
   return {
@@ -69,6 +70,57 @@ describe('HomeView recent executions', () => {
     expect(container.querySelector('[data-testid="recent-executions-table"]')?.textContent).toContain('Cleanup')
     expect(container.querySelector('[data-testid="recent-executions-table"]')?.textContent).toContain('failed')
     expect(container.querySelector('[data-testid="recent-executions-table"]')?.textContent).toContain('running')
+
+    app.unmount()
+    document.body.removeChild(container)
+  })
+
+  it('hides Resolve now when the host matches the app lock version', async () => {
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const systemInfo: SystemInfo = { appVersion: '0.1.0', hostVersion: '0.1.0', status: 'matched' }
+    const app = createApp(HomeView)
+    app.provide(appContextKey, createAppContext({
+      scriptRepository: { list: async () => [] } as never,
+      taskRepository: { list: async () => [] } as never,
+      taskRunRepository: { list: async () => [] } as never,
+      systemInfo: { load: async () => systemInfo },
+    }))
+    app.mount(container)
+    for (let index = 0; index < 5; index += 1) {
+      await nextTick()
+      await Promise.resolve()
+    }
+
+    expect(container.querySelector('[data-testid="system-info"]')?.textContent).toContain('Matched')
+    expect(container.querySelector('[data-testid="resolve-system-info"]')).toBeNull()
+
+    app.unmount()
+    document.body.removeChild(container)
+  })
+
+  it('shows Resolve now and navigates to Settings when the host differs', async () => {
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const systemInfo: SystemInfo = { appVersion: '0.1.0', hostVersion: '0.2.0', status: 'mismatch' }
+    const navigated: string[] = []
+    const app = createApp(HomeView, { onNavigate: (viewId: string) => navigated.push(viewId) })
+    app.provide(appContextKey, createAppContext({
+      scriptRepository: { list: async () => [] } as never,
+      taskRepository: { list: async () => [] } as never,
+      taskRunRepository: { list: async () => [] } as never,
+      systemInfo: { load: async () => systemInfo },
+    }))
+    app.mount(container)
+    for (let index = 0; index < 5; index += 1) {
+      await nextTick()
+      await Promise.resolve()
+    }
+
+    const resolveButton = container.querySelector('[data-testid="resolve-system-info"]') as HTMLButtonElement
+    expect(resolveButton).not.toBeNull()
+    resolveButton.click()
+    expect(navigated).toEqual(['setting'])
 
     app.unmount()
     document.body.removeChild(container)
