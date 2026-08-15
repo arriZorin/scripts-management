@@ -7,7 +7,7 @@ import type { Script } from '../models/Script'
 import type { IntervalUnit, Schedule, Task, TaskInput } from '../models/Task'
 import { INTERVAL_UNITS, todayDateString } from '../models/Task'
 import type { TaskRun, TaskRunStatus } from '../models/TaskRun'
-import { listRegisteredTasks, reconcileTasks, repairMissingTasks } from '../services/TaskReconciler'
+import { listRegisteredTasks, reconcileTasks, repairMissingTasks, repairTask } from '../services/TaskReconciler'
 import type { ReconcileResult } from '../services/TaskReconciler'
 import { errorMessage } from '../services/errorMessage'
 
@@ -30,6 +30,7 @@ const clearRunsTarget = ref(false)
 const registeredTasks = ref<string[]>([])
 const reconcile = ref<ReconcileResult>({ missing: [], orphaned: [] })
 const repairing = ref(false)
+const repairingTaskId = ref<string | null>(null)
 
 async function loadScripts() {
   if (!scriptRepository) return
@@ -81,6 +82,28 @@ async function repairTasks() {
     operationError.value = errorText(cause, 'Failed to repair tasks.')
   } finally {
     repairing.value = false
+  }
+}
+
+function isTaskMissing(taskId: string): boolean {
+  return reconcile.value.missing.some(task => task.id === taskId)
+}
+
+async function repairTaskRow(task: Task) {
+  repairingTaskId.value = task.id
+  operationError.value = ''
+  try {
+    const repaired = await repairTask(task, scripts.value, taskScheduler)
+    await load()
+    if (repaired) {
+      operationResult.value = `Repaired ${task.name}.`
+    } else {
+      operationError.value = `Cannot repair ${task.name}: script is missing.`
+    }
+  } catch (cause) {
+    operationError.value = errorText(cause, `Failed to repair ${task.name}.`)
+  } finally {
+    repairingTaskId.value = null
   }
 }
 
@@ -368,8 +391,9 @@ onMounted(() => {
             <td>{{ task.name }}</td>
             <td>{{ scripts.find(script => script.id === task.scriptId)?.name ?? task.scriptId }}<span v-if="!scripts.some(script => script.id === task.scriptId)" class="badge badge-error ml-2" data-testid="script-missing-badge">script missing</span></td>
             <td>{{ scheduleLabel(task.schedule) }}</td>
-            <td><span class="badge" :class="task.enabled ? 'badge-success' : 'badge-ghost'">{{ task.enabled ? 'Enabled' : 'Disabled' }}</span></td>
+            <td><span class="badge" :class="task.enabled ? 'badge-success' : 'badge-ghost'">{{ task.enabled ? 'Enabled' : 'Disabled' }}</span><span v-if="isTaskMissing(task.id)" class="badge badge-warning ml-2" data-testid="scheduler-missing-badge">not registered</span></td>
             <td><div class="join">
+              <button v-if="isTaskMissing(task.id)" class="btn btn-xs btn-warning join-item" :data-testid="`repair-task-${task.id}`" :disabled="repairingTaskId === task.id || repairing" @click="repairTaskRow(task)">{{ repairingTaskId === task.id ? 'Repairing...' : 'Repair' }}</button>
               <button class="btn btn-xs join-item" :data-testid="`edit-task-${task.id}`" @click="openEdit(task)">Edit</button>
               <button class="btn btn-xs join-item" :data-testid="`toggle-task-${task.id}`" @click="toggle(task)">{{ task.enabled ? 'Disable' : 'Enable' }}</button>
               <button class="btn btn-xs btn-primary join-item" :data-testid="`run-task-${task.id}`" :disabled="runningTaskId === task.id || !task.enabled" @click="runTask(task)">{{ runningTaskId === task.id ? 'Starting...' : 'Run Now' }}</button>

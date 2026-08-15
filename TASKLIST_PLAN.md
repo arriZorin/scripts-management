@@ -261,6 +261,7 @@ Implementation notes:
 - [x] Detect missing Windows tasks (JSON task with no registration → reconcile banner)
 - [x] Detect orphaned Windows tasks (registration with no JSON task → reconcile banner)
 - [x] Add Repair task action (re-registers missing tasks via `repairMissingTasks`)
+- [x] Add per-row Repair action on every task missing from Windows Task Scheduler (single-task `repairTask`; row shows a `not registered` warning badge + Repair button; script-missing rows report why repair was skipped)
 - [x] Cascade delete: deleting a script warns about linked tasks and removes them (JSON + Windows registration) first — no orphaned Windows tasks for deleted scripts
 - [ ] Handle app closed/restarted scenarios
 - [ ] Handle machine restart

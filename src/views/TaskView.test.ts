@@ -94,6 +94,24 @@ function run(overrides: Partial<TaskRun> = {}): TaskRun {
   }
 }
 
+function task(overrides: Partial<Task> = {}): Task {
+  return {
+    id: 'task-1',
+    name: 'Daily backup',
+    scriptId: script.id,
+    interpreter: 'python',
+    arguments: [],
+    schedule: { type: 'daily', startAt: '2026-08-14T08:00:00' },
+    enabled: true,
+    lastRunAt: null,
+    nextRunAt: null,
+    status: 'scheduled',
+    createdAt: '2024-01-01T00:00:00.000Z',
+    updatedAt: '2024-01-01T00:00:00.000Z',
+    ...overrides,
+  }
+}
+
 const script: Script = {
   id: 'script-1',
   name: 'backup.py',
@@ -826,5 +844,67 @@ it('flags tasks whose script is missing from the scripts list', async () => {
   const badge = container.querySelector('[data-testid="task-row-task-1"] [data-testid="script-missing-badge"]')
   expect(badge).toBeTruthy()
   expect(badge?.textContent).toContain('script missing')
+  app.unmount()
+})
+
+it('shows a per-row Repair action only for tasks missing from the scheduler', async () => {
+  const repository = new FakeTaskRepository()
+  repository.items.push(task({ id: 'task-a', name: 'Registered' }))
+  repository.items.push(task({ id: 'task-b', name: 'Missing' }))
+  mockedInvoke.mockImplementation((command: string) => {
+    if (command === 'list_scheduled_tasks') return Promise.resolve(['ScriptsManagement\\task-a'])
+    return Promise.reject(`unmocked command: ${command}`)
+  })
+  const { container, app } = mountView(repository)
+  await flush()
+
+  expect(container.querySelector('[data-testid="repair-task-task-a"]')).toBeNull()
+  expect(container.querySelector('[data-testid="repair-task-task-b"]')).toBeTruthy()
+  const badgeB = container.querySelector('[data-testid="task-row-task-b"] [data-testid="scheduler-missing-badge"]')
+  expect(badgeB).toBeTruthy()
+  expect(badgeB?.textContent).toContain('not registered')
+  expect(container.querySelector('[data-testid="task-row-task-a"] [data-testid="scheduler-missing-badge"]')).toBeNull()
+  app.unmount()
+})
+
+it('repairs a single missing task from its row', async () => {
+  const repository = new FakeTaskRepository()
+  repository.items.push(task({ id: 'task-b', name: 'Missing' }))
+  // Simulate registration: the scheduler's create() makes the name appear
+  // in list_scheduled_tasks, so the row repair clears the missing flag.
+  const registered: string[] = []
+  mockedInvoke.mockImplementation((command: string) => {
+    if (command === 'list_scheduled_tasks') return Promise.resolve([...registered])
+    return Promise.reject(`unmocked command: ${command}`)
+  })
+  const scheduler = new FakeTaskScheduler()
+  const originalCreate = scheduler.create.bind(scheduler)
+  scheduler.create = async (created: Task) => {
+    await originalCreate(created)
+    registered.push(`ScriptsManagement\\${created.id}`)
+  }
+  const { container, app } = mountView(repository, new FakeTaskExecutor(), scheduler)
+  await flush()
+
+  expect(container.querySelector('[data-testid="repair-task-task-b"]')).toBeTruthy()
+  ;(container.querySelector('[data-testid="repair-task-task-b"]') as HTMLElement).click()
+  await flush()
+
+  expect(scheduler.creates.map(created => created.id)).toEqual(['task-b'])
+  expect(container.querySelector('[data-testid="task-operation-result"]')?.textContent).toContain('Repaired Missing')
+  expect(container.querySelector('[data-testid="repair-task-task-b"]')).toBeNull()
+  app.unmount()
+})
+
+it('reports when a row repair is skipped because the script is missing', async () => {
+  const repository = new FakeTaskRepository()
+  repository.items.push(task({ id: 'task-b', name: 'Missing', scriptId: 'gone' }))
+  const { container, app } = mountView(repository)
+  await flush()
+
+  ;(container.querySelector('[data-testid="repair-task-task-b"]') as HTMLElement).click()
+  await flush()
+
+  expect(container.querySelector('[data-testid="task-operation-error"]')?.textContent).toContain('script is missing')
   app.unmount()
 })
