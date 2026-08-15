@@ -45,7 +45,7 @@ scripts are Python, and persistence remains behind interfaces.
 │                                                                              │
 │  App.vue                                                                     │
 │    ├─ useNavigation(): active view state, no vue-router                      │
-│    ├─ shared repositories/services                                            │
+│    ├─ createAppContext() + provideAppContext(): shared dependencies           │
 │    └─ Home | Scripts List | Task | Logging | Setting                         │
 │          │                                                                   │
 │          ├─ HomeView                                                          │
@@ -79,8 +79,10 @@ scripts are Python, and persistence remains behind interfaces.
 ```
 
 Every primary view preserves the `Header / Body / Footer` region contract.
-The shell owns navigation and shared dependency wiring; views consume injected
-interfaces rather than reaching directly into the filesystem.
+The shell owns navigation and provides one typed `AppContext` through Vue
+`provide/inject`; views consume injected interfaces rather than receiving a
+shared prop bag or reaching directly into the filesystem. Props remain for
+local view communication, such as Home navigation callbacks.
 
 ## 4. Directory Map
 
@@ -98,13 +100,14 @@ scripts-management/
 │
 ├── src/
 │   ├── main.ts               # Vue bootstrap and global stylesheet
-│   ├── App.vue               # shell, navigation, shared repository wiring
+│   ├── App.vue               # shell, navigation, AppContext provider
 │   ├── components/
 │   │   ├── PageShell.vue     # reusable Header/Body/Footer layout
 │   │   └── icons/             # zero-dependency SVG icons and AlertIcon
 │   ├── composables/
 │   │   ├── useNavigation.ts  # active view and nav items
-│   │   └── useAutoDismiss.ts # transient feedback timeout behavior
+│   │   ├── useAutoDismiss.ts  # transient feedback timeout behavior
+│   │   └── useAppContext.ts   # typed shared dependency injection boundary
 │   ├── views/
 │   │   ├── HomeView.vue      # live dashboard and clickable stats
 │   │   ├── ScriptsListView.vue
@@ -145,12 +148,16 @@ scripts-management/
    `TauriFileStorage`.
 3. **Native work crosses explicit ports.** `TaskScheduler`, `TaskExecutor`,
    and `AppLogger` isolate Tauri `invoke()` calls from Vue behavior.
-4. **Navigation has no router dependency.** `useNavigation` owns the active
+4. **Shared dependencies use typed injection.** `App.vue` creates production
+   implementations once with `createAppContext()` and provides them through
+   `provideAppContext()`. Views call `useAppContext()`; tests provide fakes at
+   the same boundary. Props are reserved for local component communication.
+5. **Navigation has no router dependency.** `useNavigation` owns the active
    view id. Home stats receive the shell's `setView` callback and navigate to
    Scripts List, Task, or Logging.
-5. **All primary views preserve semantic regions.** Keep `.region.header`,
+6. **All primary views preserve semantic regions.** Keep `.region.header`,
    `.region.body`, and `.region.footer` hooks when changing layouts.
-6. **TypeScript is strict.** `vue-tsc --noEmit` runs as part of `bun run build`.
+7. **TypeScript is strict.** `vue-tsc --noEmit` runs as part of `bun run build`.
 
 ## 6. Persistence and Data Flow
 
@@ -221,6 +228,7 @@ kept green throughout the completed slices:
 | Dev/prod application logging | complete; real artifact comparison performed |
 | Home dashboard statistics | complete |
 | Clickable dashboard stats | complete; scripts → Scripts List, tasks → Task, runs → Logging |
+| Typed Vue AppContext dependency injection | complete; shared services provided once by App.vue |
 | Setting view persistence/configuration | pending |
 
 ## 8. Remaining Work / Current Stage

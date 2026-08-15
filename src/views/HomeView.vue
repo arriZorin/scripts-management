@@ -100,6 +100,7 @@ onMounted(loadStats);
               <div class="stat-desc text-secondary">{{ stats.successRuns }} of {{ stats.totalRuns }} runs succeeded</div>
             </button>
           </div>
+          <div class="divider"></div>
           <section class="mt-6" data-testid="recent-executions">
             <h2 class="mb-3 text-lg font-semibold">Recent Executions</h2>
             <div v-if="recentRuns.length === 0" class="alert alert-info" data-testid="recent-executions-empty" role="alert">
