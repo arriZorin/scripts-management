@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Script } from '../models/Script'
 import type { Task } from '../models/Task'
 import type { TaskScheduler } from './TaskScheduler'
-import { reconcileTasks, repairMissingTasks } from './TaskReconciler'
+import { reconcileTasks, repairMissingTasks, repairTask } from './TaskReconciler'
 
 function task(overrides: Partial<Task> = {}): Task {
   return {
@@ -101,5 +101,42 @@ describe('repairMissingTasks', () => {
 
     expect(creates).toEqual([])
     expect(repaired).toEqual([])
+  })
+})
+
+describe('repairTask', () => {
+  function schedulerWithCreates(creates: Task[]): TaskScheduler {
+    return {
+      create: async (task: Task) => { creates.push(task) },
+      update: async () => {},
+      delete: async () => {},
+      setEnabled: async () => {},
+    }
+  }
+
+  it('re-registers a single task through the scheduler when its script exists', async () => {
+    const creates: Task[] = []
+
+    const repaired = await repairTask(
+      task({ id: 'task-b', name: 'Missing' }),
+      [script],
+      schedulerWithCreates(creates),
+    )
+
+    expect(creates.map(t => t.id)).toEqual(['task-b'])
+    expect(repaired).toBe(true)
+  })
+
+  it('returns false without registering when the script is missing', async () => {
+    const creates: Task[] = []
+
+    const repaired = await repairTask(
+      task({ id: 'task-b', name: 'Missing', scriptId: 'gone' }),
+      [script],
+      schedulerWithCreates(creates),
+    )
+
+    expect(creates).toEqual([])
+    expect(repaired).toBe(false)
   })
 })

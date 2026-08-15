@@ -27,6 +27,22 @@ export function reconcileTasks(tasks: Task[], registeredNames: string[]): Reconc
 }
 
 /**
+ * Re-registers a single task whose Windows registration is missing. Returns
+ * true when the task was repaired, or false when its script no longer
+ * resolves (deleted/moved) and repair was skipped.
+ */
+export async function repairTask(
+  task: Task,
+  scripts: Script[],
+  scheduler: TaskScheduler,
+): Promise<boolean> {
+  const script = scripts.find(candidate => candidate.id === task.scriptId)
+  if (!script) return false
+  await scheduler.create(task, script)
+  return true
+}
+
+/**
  * Re-registers each missing task whose script still exists. Returns the ids
  * that were repaired. Tasks with a deleted/moved script are skipped (their
  * scriptId no longer resolves), so the caller can surface them separately.
@@ -37,13 +53,9 @@ export async function repairMissingTasks(
   scripts: Script[],
   scheduler: TaskScheduler,
 ): Promise<string[]> {
-  const scriptsById = new Map(scripts.map(script => [script.id, script]))
   const repaired: string[] = []
   for (const task of reconcileTasks(tasks, registeredNames).missing) {
-    const script = scriptsById.get(task.scriptId)
-    if (!script) continue
-    await scheduler.create(task, script)
-    repaired.push(task.id)
+    if (await repairTask(task, scripts, scheduler)) repaired.push(task.id)
   }
   return repaired
 }
