@@ -870,7 +870,7 @@ it('shows a per-row Repair action only for tasks missing from the scheduler', as
   expect(container.querySelector('[data-testid="toggle-task-task-a"]')).toBeTruthy()
   expect(container.querySelector('[data-testid="run-task-task-a"]')).toBeTruthy()
   expect(container.querySelector('[data-testid="delete-task-task-a"]')).toBeTruthy()
-  // Missing row: not-registered status only, repair + delete only.
+  // Missing row: unregistered status only, repair + delete only.
   const badgeB = rowB?.querySelector('[data-testid="scheduler-missing-badge"]')
   expect(badgeB).toBeTruthy()
   expect(badgeB?.textContent).toContain('unregistered')

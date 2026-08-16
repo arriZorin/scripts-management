@@ -34,7 +34,7 @@ const RULES: Rule[] = [
   {
     match: /0x80041322|0x8004131f|task (is )?disabled|unknown task/i,
     message:
-      'The task is missing, disabled, or not registered. Use Repair to re-register it, or check the task exists in Task Scheduler.',
+      'The task is missing, disabled, or unregistered. Use Repair to re-register it, or check the task exists in Task Scheduler.',
   },
   {
     match: /0x80041317|already running/i,
