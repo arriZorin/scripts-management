@@ -21,17 +21,23 @@ export class FakeProcessRunner implements ProcessRunner {
 export class FakeEnvironmentQuery implements EnvironmentQuery {
   registryPaths: string[] = []
   pathMatches: string[] = []
+  existingFiles: string[] = []
 
   async queryPythonRegistry(): Promise<string[]> {
     return this.registryPaths
   }
 
-  async findAllInPath(_name: string): Promise<string[]> {
-    return this.pathMatches
+  async findAllInPath(name: string): Promise<string[]> {
+    const exeName = name.toLowerCase().endsWith('.exe') ? name.toLowerCase() : `${name.toLowerCase()}.exe`
+    return this.pathMatches.filter((path) => path.toLowerCase().endsWith(exeName))
   }
 
   async defaultUvInstallDir(): Promise<string> {
     return 'C:\\fake\\uv'
+  }
+
+  async fileExists(path: string): Promise<boolean> {
+    return this.existingFiles.includes(path)
   }
 }
 
@@ -42,12 +48,12 @@ export class FakeFileDownloader implements FileDownloader {
   deletedFiles: string[] = []
 
   constructor(
-    private readonly onDownloaded: (destPath: string) => void = () => {},
+    private readonly onDownloaded: (url: string, destPath: string) => void = () => {},
   ) {}
 
   async downloadToFile(url: string, destPath: string): Promise<void> {
     this.downloads.push({ url, destPath })
-    this.onDownloaded(destPath)
+    this.onDownloaded(url, destPath)
   }
 
   async extractZip(zipPath: string, destDir: string): Promise<void> {

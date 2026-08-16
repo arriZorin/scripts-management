@@ -12,6 +12,8 @@ export interface EnvironmentQuery {
   queryPythonRegistry(): Promise<string[]>
   /** `%LOCALAPPDATA%\Programs\uv` — the app-managed uv install dir. */
   defaultUvInstallDir(): Promise<string>
+  /** True when an absolute path points at an existing file. */
+  fileExists(path: string): Promise<boolean>
 }
 
 export class TauriEnvironmentQuery implements EnvironmentQuery {
@@ -25,5 +27,9 @@ export class TauriEnvironmentQuery implements EnvironmentQuery {
 
   defaultUvInstallDir(): Promise<string> {
     return invoke<string>('default_uv_install_dir')
+  }
+
+  fileExists(path: string): Promise<boolean> {
+    return invoke<boolean>('path_exists', { path })
   }
 }
