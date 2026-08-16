@@ -5,6 +5,7 @@ import { appContextKey, createAppContext } from '../composables/useAppContext'
 import type { Task } from '../models/Task'
 import type { TaskRun } from '../models/TaskRun'
 import type { SystemInfo } from '../services/systemInfo'
+import type { RequirementCheckResult, RuntimeRequirement } from '../services/runtimeCheck/types'
 
 function task(id: string, name: string): Task {
   return {
@@ -36,10 +37,44 @@ function run(id: string, taskId: string, startedAt: string, status: TaskRun['sta
   }
 }
 
+function runtimeResult(status: RequirementCheckResult['status']): RequirementCheckResult {
+  return {
+    status,
+    requirementName: 'Python runtime',
+    message: status === 'met' ? 'Python 3.12.10 found on host.' : 'No Python matching \'>=3.11\' found.',
+    detail: status === 'met' ? null : 'Resolve tries: uv-managed install, then the official installer.',
+    resolvedPath: status === 'met' ? 'C:\\Python312\\python.exe' : null,
+  }
+}
+
+function fakeRuntimeRequirement(result: RequirementCheckResult): RuntimeRequirement {
+  return {
+    check: async () => result,
+    resolve: async () => ({ ...result, status: 'met' as const, message: 'Python 3.12.10 found on host.' }),
+  }
+}
+
+const emptyOverrides = {
+  scriptRepository: { list: async () => [] } as never,
+  taskRepository: { list: async () => [] } as never,
+  taskRunRepository: { list: async () => [] } as never,
+}
+
+async function mountHome(overrides: Record<string, unknown>, extraProps: Record<string, unknown> = {}) {
+  const container = document.createElement('div')
+  document.body.appendChild(container)
+  const app = createApp(HomeView, extraProps)
+  app.provide(appContextKey, createAppContext(overrides))
+  app.mount(container)
+  for (let index = 0; index < 5; index += 1) {
+    await nextTick()
+    await Promise.resolve()
+  }
+  return { container, app }
+}
+
 describe('HomeView recent executions', () => {
   it('renders the five newest executions with task names and status', async () => {
-    const container = document.createElement('div')
-    document.body.appendChild(container)
     const tasks = [task('task-1', 'Backup'), task('task-2', 'Cleanup')]
     const runs = [
       run('run-1', 'task-1', '2026-08-14T01:00:00.000Z'),
@@ -50,17 +85,12 @@ describe('HomeView recent executions', () => {
       run('run-6', 'task-2', '2026-08-14T06:00:00.000Z'),
     ]
 
-    const app = createApp(HomeView)
-    app.provide(appContextKey, createAppContext({
-      scriptRepository: { list: async () => [] } as never,
+    const { container, app } = await mountHome({
+      ...emptyOverrides,
       taskRepository: { list: async () => tasks } as never,
       taskRunRepository: { list: async () => runs } as never,
-    }))
-    app.mount(container)
-    for (let index = 0; index < 5; index += 1) {
-      await nextTick()
-      await Promise.resolve()
-    }
+      runtimeRequirement: fakeRuntimeRequirement(runtimeResult('met')),
+    })
 
     const rows = container.querySelectorAll('[data-testid^="recent-execution-row-"]')
     expect(rows).toHaveLength(5)
@@ -76,21 +106,12 @@ describe('HomeView recent executions', () => {
   })
 
   it('hides Resolve now when the host matches the app lock version', async () => {
-    const container = document.createElement('div')
-    document.body.appendChild(container)
     const systemInfo: SystemInfo = { appVersion: '0.1.0', hostVersion: '0.1.0', status: 'matched' }
-    const app = createApp(HomeView)
-    app.provide(appContextKey, createAppContext({
-      scriptRepository: { list: async () => [] } as never,
-      taskRepository: { list: async () => [] } as never,
-      taskRunRepository: { list: async () => [] } as never,
+    const { container, app } = await mountHome({
+      ...emptyOverrides,
       systemInfo: { load: async () => systemInfo },
-    }))
-    app.mount(container)
-    for (let index = 0; index < 5; index += 1) {
-      await nextTick()
-      await Promise.resolve()
-    }
+      runtimeRequirement: fakeRuntimeRequirement(runtimeResult('met')),
+    })
 
     expect(container.querySelector('[data-testid="system-info"]')?.textContent).toContain('Matched')
     expect(container.querySelector('[data-testid="resolve-system-info"]')).toBeNull()
@@ -100,27 +121,84 @@ describe('HomeView recent executions', () => {
   })
 
   it('shows Resolve now and navigates to Settings when the host differs', async () => {
-    const container = document.createElement('div')
-    document.body.appendChild(container)
     const systemInfo: SystemInfo = { appVersion: '0.1.0', hostVersion: '0.2.0', status: 'mismatch' }
     const navigated: string[] = []
-    const app = createApp(HomeView, { onNavigate: (viewId: string) => navigated.push(viewId) })
-    app.provide(appContextKey, createAppContext({
-      scriptRepository: { list: async () => [] } as never,
-      taskRepository: { list: async () => [] } as never,
-      taskRunRepository: { list: async () => [] } as never,
+    const { container, app } = await mountHome({
+      ...emptyOverrides,
       systemInfo: { load: async () => systemInfo },
-    }))
-    app.mount(container)
-    for (let index = 0; index < 5; index += 1) {
-      await nextTick()
-      await Promise.resolve()
-    }
+      runtimeRequirement: fakeRuntimeRequirement(runtimeResult('met')),
+    }, { onNavigate: (viewId: string) => navigated.push(viewId) })
 
     const resolveButton = container.querySelector('[data-testid="resolve-system-info"]') as HTMLButtonElement
     expect(resolveButton).not.toBeNull()
     resolveButton.click()
     expect(navigated).toEqual(['setting'])
+
+    app.unmount()
+    document.body.removeChild(container)
+  })
+})
+
+describe('HomeView runtime requirement card', () => {
+  it('shows a Met badge and no Resolve button when the requirement is met', async () => {
+    const { container, app } = await mountHome({
+      ...emptyOverrides,
+      runtimeRequirement: fakeRuntimeRequirement(runtimeResult('met')),
+    })
+
+    const status = container.querySelector('[data-testid="runtime-status"]')
+    expect(status?.textContent).toBe('Met')
+    expect(container.querySelector('[data-testid="runtime-requirement"]')?.textContent).toContain('Python 3.12.10 found on host.')
+    expect(container.querySelector('[data-testid="resolve-runtime"]')).toBeNull()
+
+    app.unmount()
+    document.body.removeChild(container)
+  })
+
+  it('shows a Not met badge with a Resolve button when missing', async () => {
+    const { container, app } = await mountHome({
+      ...emptyOverrides,
+      runtimeRequirement: fakeRuntimeRequirement(runtimeResult('notMet')),
+    })
+
+    const status = container.querySelector('[data-testid="runtime-status"]')
+    expect(status?.textContent).toBe('Not met')
+    expect(container.querySelector('[data-testid="resolve-runtime"]')).not.toBeNull()
+
+    app.unmount()
+    document.body.removeChild(container)
+  })
+
+  it('resolves and flips the status to Met when Resolve is clicked', async () => {
+    const { container, app } = await mountHome({
+      ...emptyOverrides,
+      runtimeRequirement: fakeRuntimeRequirement(runtimeResult('notMet')),
+    })
+
+    const resolveButton = container.querySelector('[data-testid="resolve-runtime"]') as HTMLButtonElement
+    expect(resolveButton).not.toBeNull()
+    resolveButton.click()
+    for (let index = 0; index < 5; index += 1) {
+      await nextTick()
+      await Promise.resolve()
+    }
+
+    expect(container.querySelector('[data-testid="runtime-status"]')?.textContent).toBe('Met')
+    expect(container.querySelector('[data-testid="resolve-runtime"]')).toBeNull()
+
+    app.unmount()
+    document.body.removeChild(container)
+  })
+
+  it('shows Try again for a deferred requirement', async () => {
+    const { container, app } = await mountHome({
+      ...emptyOverrides,
+      runtimeRequirement: fakeRuntimeRequirement(runtimeResult('deferred')),
+    })
+
+    const resolveButton = container.querySelector('[data-testid="resolve-runtime"]') as HTMLButtonElement
+    expect(resolveButton).not.toBeNull()
+    expect(resolveButton.textContent).toContain('Try again')
 
     app.unmount()
     document.body.removeChild(container)

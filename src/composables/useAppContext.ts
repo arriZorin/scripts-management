@@ -20,6 +20,8 @@ import { TaskRunRecorder } from '../services/TaskRunRecorder'
 import { TauriFileStorage } from '../services/TauriFileStorage'
 import { tauriSystemInfoService, type SystemInfoService } from '../services/systemInfo'
 import { tauriScriptPathChecker, type ScriptPathChecker } from '../services/scriptPathChecker'
+import { createRuntimeRequirement } from '../services/runtimeCheck/createRuntimeRequirement'
+import type { RuntimeRequirement } from '../services/runtimeCheck/types'
 
 export interface AppContext {
   scriptRepository: ScriptRepository
@@ -34,6 +36,7 @@ export interface AppContext {
   scanner: FileScanner
   systemInfo: SystemInfoService
   scriptPathChecker: ScriptPathChecker
+  runtimeRequirement: RuntimeRequirement
 }
 
 export const appContextKey: InjectionKey<AppContext> = Symbol('appContext')
@@ -59,6 +62,7 @@ export function createAppContext(overrides: Partial<AppContext> = {}): AppContex
     scanner: overrides.scanner ?? new TauriFileScanner(),
     systemInfo: overrides.systemInfo ?? tauriSystemInfoService,
     scriptPathChecker: overrides.scriptPathChecker ?? tauriScriptPathChecker,
+    runtimeRequirement: overrides.runtimeRequirement ?? createRuntimeRequirement(),
   }
 }
 

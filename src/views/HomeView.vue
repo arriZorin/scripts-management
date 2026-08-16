@@ -6,6 +6,7 @@ import type { Task } from '../models/Task';
 import type { TaskRun } from '../models/TaskRun';
 import { computeDashboardStats, type DashboardStats } from '../services/dashboardStats';
 import type { SystemInfo } from '../services/systemInfo';
+import type { RequirementCheckResult } from '../services/runtimeCheck/types';
 
 interface Props {
   onNavigate?: (viewId: string) => void;
@@ -14,7 +15,13 @@ interface Props {
 const props = defineProps<Props>();
 const onNavigate = props.onNavigate;
 
-const { scriptRepository, taskRepository, taskRunRepository, systemInfo: systemInfoService } = useAppContext();
+const {
+  scriptRepository,
+  taskRepository,
+  taskRunRepository,
+  systemInfo: systemInfoService,
+  runtimeRequirement,
+} = useAppContext();
 
 const stats = ref<DashboardStats>({
   totalScripts: 0,
@@ -29,6 +36,9 @@ const tasks = ref<Task[]>([]);
 const recentRuns = ref<TaskRun[]>([]);
 const systemInfo = ref<SystemInfo | null>(null);
 const loaded = ref(false);
+const runtimeResult = ref<RequirementCheckResult | null>(null);
+const runtimeChecking = ref(false);
+const runtimeResolving = ref(false);
 
 async function loadStats() {
   const [scripts, loadedTasks, runs, loadedSystemInfo]: [Script[], Task[], TaskRun[], SystemInfo | null] = await Promise.all([
@@ -46,6 +56,40 @@ async function loadStats() {
   loaded.value = true;
 }
 
+async function checkRuntime() {
+  runtimeChecking.value = true;
+  try {
+    runtimeResult.value = await runtimeRequirement.check();
+  } catch (error) {
+    runtimeResult.value = {
+      status: 'failed',
+      requirementName: 'Python runtime',
+      message: 'Runtime check failed.',
+      detail: error instanceof Error ? error.message : String(error),
+      resolvedPath: null,
+    };
+  } finally {
+    runtimeChecking.value = false;
+  }
+}
+
+async function resolveRuntime() {
+  runtimeResolving.value = true;
+  try {
+    runtimeResult.value = await runtimeRequirement.resolve();
+  } catch (error) {
+    runtimeResult.value = {
+      status: 'failed',
+      requirementName: 'Python runtime',
+      message: 'Resolve failed.',
+      detail: error instanceof Error ? error.message : String(error),
+      resolvedPath: null,
+    };
+  } finally {
+    runtimeResolving.value = false;
+  }
+}
+
 function taskName(taskId: string) {
   return tasks.value.find((task) => task.id === taskId)?.name ?? taskId;
 }
@@ -54,7 +98,28 @@ function formatRunDate(value: string | null) {
   return value ? new Date(value).toLocaleString() : '-';
 }
 
-onMounted(loadStats);
+function runtimeStatusLabel(status: RequirementCheckResult['status']): string {
+  switch (status) {
+    case 'met': return 'Met';
+    case 'notMet': return 'Not met';
+    case 'deferred': return 'Deferred';
+    case 'failed': return 'Failed';
+  }
+}
+
+function runtimeStatusBadge(status: RequirementCheckResult['status']): string {
+  switch (status) {
+    case 'met': return 'badge-success';
+    case 'notMet': return 'badge-warning';
+    case 'deferred': return 'badge-warning';
+    case 'failed': return 'badge-error';
+  }
+}
+
+onMounted(() => {
+  loadStats();
+  checkRuntime();
+});
 </script>
 
 <template>
@@ -129,6 +194,26 @@ onMounted(loadStats);
               </div>
               <div v-if="systemInfo && systemInfo.status !== 'matched'" class="card-actions justify-end">
                 <button type="button" class="btn btn-primary btn-sm" data-testid="resolve-system-info" @click="onNavigate?.('setting')">Resolve now</button>
+              </div>
+              <div class="divider my-2"></div>
+              <div data-testid="runtime-requirement">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div class="text-xs uppercase opacity-60">Python runtime</div>
+                    <div class="font-medium">{{ runtimeResult?.message ?? 'Checking...' }}</div>
+                    <div v-if="runtimeResult?.detail" class="text-xs opacity-60">{{ runtimeResult.detail }}</div>
+                    <div v-if="runtimeResult?.status === 'met' && runtimeResult.resolvedPath" class="text-xs opacity-60">{{ runtimeResult.resolvedPath }}</div>
+                  </div>
+                  <span v-if="runtimeResult" class="badge" :class="runtimeStatusBadge(runtimeResult.status)" data-testid="runtime-status">{{ runtimeStatusLabel(runtimeResult.status) }}</span>
+                  <span v-else class="loading loading-spinner loading-sm" aria-label="Checking runtime"></span>
+                </div>
+                <div v-if="runtimeResult && runtimeResult.status !== 'met'" class="card-actions justify-end">
+                  <button type="button" class="btn btn-primary btn-sm" data-testid="resolve-runtime"
+                          :disabled="runtimeResolving" @click="resolveRuntime">
+                    <span v-if="runtimeResolving" class="loading loading-spinner loading-xs"></span>
+                    {{ runtimeResult.status === 'deferred' ? 'Try again' : 'Resolve' }}
+                  </button>
+                </div>
               </div>
             </div>
           </section>

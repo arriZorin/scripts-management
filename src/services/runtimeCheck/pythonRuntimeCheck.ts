@@ -18,13 +18,15 @@ function messageOf(error: unknown): string {
  *   Exhausted: deferred — try again now or on next launch.
  */
 export class PythonRuntimeCheck implements RuntimeRequirement {
+  private uvInstallDirPromise: Promise<string> | null = null
+
   constructor(
     private readonly processRunner: ProcessRunner,
     private readonly locator: PythonLocator,
     private readonly bootstrapper: UvBootstrapper,
     private readonly directInstaller: DirectPythonInstaller,
     private readonly environmentQuery: EnvironmentQuery,
-    private readonly uvInstallDir: string,
+    private readonly uvInstallDir: string | null = null,
     private readonly constraint = '>=3.11',
   ) {}
 
@@ -79,7 +81,7 @@ export class PythonRuntimeCheck implements RuntimeRequirement {
       let uvPath = await this.locateUv()
       if (uvPath === null) {
         try {
-          uvPath = await this.bootstrapper.bootstrap(this.uvInstallDir)
+          uvPath = await this.bootstrapper.bootstrap(await this.uvInstallDirValue())
           attempts.push('bootstrapped uv')
         } catch (error) {
           attempts.push(`uv bootstrap failed: ${messageOf(error)}`)
@@ -134,8 +136,8 @@ export class PythonRuntimeCheck implements RuntimeRequirement {
   }
 
   private async locateUv(): Promise<string | null> {
-    const managed = joinPath(this.uvInstallDir, 'uv.exe')
     try {
+      const managed = joinPath(await this.uvInstallDirValue(), 'uv.exe')
       if (await this.environmentQuery.fileExists(managed)) {
         return managed
       }
@@ -144,5 +146,13 @@ export class PythonRuntimeCheck implements RuntimeRequirement {
     } catch {
       return null
     }
+  }
+
+  /** Resolves the managed uv install dir once (explicit value or env query). */
+  private uvInstallDirValue(): Promise<string> {
+    this.uvInstallDirPromise ??= this.uvInstallDir !== null
+      ? Promise.resolve(this.uvInstallDir)
+      : this.environmentQuery.defaultUvInstallDir()
+    return this.uvInstallDirPromise
   }
 }
