@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use tauri::Manager;
 
 mod scheduler;
+mod systeminfo;
 #[cfg(windows)]
 mod windows_scheduler;
 
@@ -380,7 +381,13 @@ pub fn run() {
             get_task_run_result,
             resolve_interpreter_path,
             get_log_directory,
-            get_app_mode
+            get_app_mode,
+            systeminfo::run_process,
+            systeminfo::find_all_in_path_command,
+            systeminfo::query_python_registry,
+            systeminfo::default_uv_install_dir,
+            systeminfo::download_to_file,
+            systeminfo::extract_zip
         ])
         .setup(|app| {
             let dir = app.path().app_local_data_dir()?;
