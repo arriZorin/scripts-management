@@ -345,3 +345,12 @@ Plan: `.hermes/plans/20260816_163442-systeminfo-uv-runtime-check.tauri.md` (adap
 **Commit convention:** one TDD slice per commit, `feat(slice): ...`, build verified + tests green.
 
 2026-08-16: All 9 slices implemented TDD, each committed green. Frontend 261/261, cargo 44/44 (+2 ignored), `bun run build` + `cargo build` verified. Real-host smoke: uv 0.11.26 present; `uv python find ">=3.11"` → managed cpython-3.11 python.exe; Layer-1 probe on this host → venv 3.11.15 accepted (Met), ETAP 3.8.4 fails constraint, WindowsApps stub rejected by path — exactly the plan's predicted outcome. NOTE: dev-deps differ from the original plan (ureq instead of reqwest — lighter, blocking inside spawn_blocking; zip + winreg as planned).
+
+## Task Form — Exclude Missing-Path Scripts
+
+- [x] Script selector excludes scripts whose file is missing on disk (path-checked via `scriptPathChecker`), on both New Task and Edit
+- [x] Editing a task bound to a missing-path script shows the existing "Script missing — select a replacement" disabled placeholder instead of listing the broken script
+- [x] New-task default selection skips missing-path scripts (first healthy script, not first sorted)
+- [x] Save validation rejects a selected missing-path script ("Script is missing — select a replacement") — no broken task can be created or persisted
+
+**Acceptance:** Missing-path scripts never appear as selectable options in the add/edit task dialog; tasks already bound to them render the replacement placeholder and cannot be saved without choosing a healthy script. ✅ Verified 2026-08-16: 264/264 frontend tests green (3 new RED→GREEN cases), `bun run build` green, committed as one TDD slice.

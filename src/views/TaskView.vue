@@ -16,6 +16,7 @@ import { errorMessage } from '../services/errorMessage'
 const { scriptRepository, taskRepository, taskExecutor, taskScheduler, logger, taskRunRepository, taskRunRecorder, scriptPathChecker } = useAppContext()
 const scripts = ref<Script[]>([])
 const sortedScripts = computed(() => sortScripts(scripts.value))
+const selectableScripts = computed(() => sortedScripts.value.filter(script => !missingPathScriptIds.value.includes(script.id)))
 const scriptLabels = computed(() => scriptDisplayLabels(scripts.value))
 
 function scriptLabelOf(scriptId: string): string {
@@ -63,7 +64,7 @@ async function refreshMissingScriptPaths() {
 function emptyForm(): TaskInput {
   return {
     name: '',
-    scriptId: sortedScripts.value[0]?.id ?? '',
+    scriptId: selectableScripts.value[0]?.id ?? '',
     interpreter: 'python',
     arguments: [],
     schedule: { type: 'daily', startAt: `${todayDateString()}T08:00:00` },
@@ -292,6 +293,7 @@ async function save() {
   try {
     if (!form.value.name.trim()) throw new Error('Task name is required')
     if (!form.value.scriptId) throw new Error('Script is required')
+    if (missingPathScriptIds.value.includes(form.value.scriptId)) throw new Error('Script is missing — select a replacement')
     if (!form.value.interpreter.trim()) throw new Error('Python interpreter is required')
     const script = scripts.value.find(script => script.id === form.value.scriptId)
     if (!script) throw new Error('Script is required')
@@ -509,7 +511,7 @@ onMounted(() => {
           <label class="label">Name</label>
           <input v-model="form.name" class="input input-bordered w-full" data-testid="task-name-input" placeholder="Daily backup" />
           <label class="label">Script</label>
-          <select v-model="form.scriptId" class="select select-bordered w-full" data-testid="script-select"><option v-if="form.scriptId && !scripts.some(script => script.id === form.scriptId)" :value="form.scriptId" disabled data-testid="script-missing-placeholder">Script missing — select a replacement</option><option v-for="script in sortedScripts" :key="script.id" :value="script.id" :title="script.path">{{ scriptLabelOf(script.id) }}<template v-if="missingPathScriptIds.includes(script.id)"> (path missing)</template></option></select>
+          <select v-model="form.scriptId" class="select select-bordered w-full" data-testid="script-select"><option v-if="form.scriptId && (!scripts.some(script => script.id === form.scriptId) || missingPathScriptIds.includes(form.scriptId))" :value="form.scriptId" disabled data-testid="script-missing-placeholder">Script missing — select a replacement</option><option v-for="script in selectableScripts" :key="script.id" :value="script.id" :title="script.path">{{ scriptLabelOf(script.id) }}</option></select>
           <label class="label">Python interpreter</label>
           <input v-model="form.interpreter" class="input input-bordered w-full" data-testid="interpreter-input" placeholder="python" />
           <label class="label">Arguments</label>

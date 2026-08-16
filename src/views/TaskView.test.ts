@@ -1157,6 +1157,69 @@ it('flags tasks whose script file is missing on disk as script missing', async (
   app.unmount()
 })
 
+it('excludes scripts whose path is missing from the new-task script selector', async () => {
+  const repository = new FakeTaskRepository()
+  const scriptRepository = new FakeScriptRepository()
+  scriptRepository.items.push({ id: 'script-broken', name: 'broken.py', path: 'C:/scripts/broken.py', type: 'python', createdAt: '2024-01-01T00:00:00.000Z', updatedAt: '2024-01-01T00:00:00.000Z' })
+  const pathChecker = { exists: async (path: string) => path !== 'C:/scripts/broken.py' }
+  const { container, app } = mountView(repository, new FakeTaskExecutor(), new FakeTaskScheduler(), new FakeLogger(), new FakeTaskRunRepository(), scriptRepository, pathChecker)
+  await flush()
+
+  ;(container.querySelector('[data-testid="new-task-btn"]') as HTMLElement).click()
+  await flush()
+
+  const options = [...container.querySelectorAll('[data-testid="script-select"] option')].map(option => option.textContent)
+  expect(options).toContain('backup.py')
+  expect(options.some(option => option?.includes('broken'))).toBe(false)
+  const select = container.querySelector('[data-testid="script-select"]') as HTMLSelectElement
+  expect(select.value).toBe(script.id)
+  app.unmount()
+})
+
+it('shows a replacement prompt when editing a task whose script path is missing', async () => {
+  const repository = new FakeTaskRepository()
+  const brokenScript: Script = { id: 'script-broken', name: 'broken.py', path: 'C:/scripts/broken.py', type: 'python', createdAt: '2024-01-01T00:00:00.000Z', updatedAt: '2024-01-01T00:00:00.000Z' }
+  const scriptRepository = new FakeScriptRepository()
+  scriptRepository.items.push(brokenScript)
+  await repository.create({ name: 'Broken script task', scriptId: brokenScript.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', startAt: '2026-08-14T08:00:00' }, enabled: true })
+  const pathChecker = { exists: async (path: string) => path !== brokenScript.path }
+  const { container, app } = mountView(repository, new FakeTaskExecutor(), new FakeTaskScheduler(), new FakeLogger(), new FakeTaskRunRepository(), scriptRepository, pathChecker)
+  await flush()
+
+  ;(container.querySelector('[data-testid="edit-task-task-1"]') as HTMLElement).click()
+  await flush()
+
+  const placeholder = container.querySelector('[data-testid="script-select"] [data-testid="script-missing-placeholder"]')
+  expect(placeholder).toBeTruthy()
+  expect(placeholder?.textContent).toContain('select a replacement')
+  const options = [...container.querySelectorAll('[data-testid="script-select"] option')].map(option => option.textContent)
+  expect(options).toContain('backup.py')
+  expect(options).not.toContain('broken.py')
+  app.unmount()
+})
+
+it('blocks saving while the selected script path is missing', async () => {
+  const repository = new FakeTaskRepository()
+  const brokenScript: Script = { id: 'script-broken', name: 'broken.py', path: 'C:/scripts/broken.py', type: 'python', createdAt: '2024-01-01T00:00:00.000Z', updatedAt: '2024-01-01T00:00:00.000Z' }
+  const scriptRepository = new FakeScriptRepository()
+  scriptRepository.items.push(brokenScript)
+  await repository.create({ name: 'Broken script task', scriptId: brokenScript.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', startAt: '2026-08-14T08:00:00' }, enabled: true })
+  const pathChecker = { exists: async (path: string) => path !== brokenScript.path }
+  const { container, app } = mountView(repository, new FakeTaskExecutor(), new FakeTaskScheduler(), new FakeLogger(), new FakeTaskRunRepository(), scriptRepository, pathChecker)
+  await flush()
+
+  ;(container.querySelector('[data-testid="edit-task-task-1"]') as HTMLElement).click()
+  await flush()
+  ;(container.querySelector('[data-testid="save-task-btn"]') as HTMLElement).click()
+  await flush()
+
+  const dialog = container.querySelector('[data-testid="task-dialog"]')
+  expect(dialog?.textContent).toContain('Script is missing')
+  expect(repository.items[0].scriptId).toBe(brokenScript.id)
+  expect(container.querySelector('[data-testid="task-dialog"]')).toBeTruthy()
+  app.unmount()
+})
+
 it('repair all skips tasks whose script file is missing on disk', async () => {
   const repository = new FakeTaskRepository()
   repository.items.push(task({ id: 'task-a', name: 'Healthy' }))
