@@ -52,7 +52,7 @@ export class PythonRuntimeCheck implements RuntimeRequirement {
             requirementName: REQUIREMENT_NAME,
             message: `Python ${this.constraint} is available via uv.`,
             detail: null,
-            resolvedPath: find.standardOutput.trim(),
+            resolvedPath: (find.standardOutput ?? '').trim(),
           }
         }
       } catch {
@@ -95,7 +95,7 @@ export class PythonRuntimeCheck implements RuntimeRequirement {
           { timeoutMs: 5 * 60 * 1000 },
         )
         if (install.exitCode !== 0) {
-          attempts.push(`uv python install failed: ${install.standardError.trim()}`)
+          attempts.push(`uv python install failed: ${(install.standardError ?? '').trim()}`)
         } else {
           const recheck = await this.check()
           if (recheck.status === 'met') {

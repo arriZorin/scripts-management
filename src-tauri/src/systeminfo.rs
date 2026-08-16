@@ -16,10 +16,11 @@ use std::process::{Command, Stdio};
 use std::time::Duration;
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProcessResult {
     pub exit_code: i32,
-    pub stdout: String,
-    pub stderr: String,
+    pub standard_output: String,
+    pub standard_error: String,
 }
 
 /// Runs `file_name` with `args`, capturing stdout/stderr, killing the process
@@ -77,8 +78,8 @@ pub fn run_process_impl(
     let stderr = stderr_handle.join().unwrap_or_default();
     Ok(ProcessResult {
         exit_code,
-        stdout,
-        stderr,
+        standard_output: stdout,
+        standard_error: stderr,
     })
 }
 
@@ -275,7 +276,7 @@ mod tests {
         let result = run_process_impl("cmd.exe", &["/c".to_string(), "echo hello".to_string()], None)
             .expect("should run");
         assert_eq!(result.exit_code, 0);
-        assert!(result.stdout.contains("hello"));
+        assert!(result.standard_output.contains("hello"));
     }
 
     #[test]
@@ -283,6 +284,24 @@ mod tests {
         let result = run_process_impl("cmd.exe", &["/c".to_string(), "exit 42".to_string()], None)
             .expect("should run");
         assert_eq!(result.exit_code, 42);
+    }
+
+    #[test]
+    fn process_result_serializes_to_frontend_contract_names() {
+        // The TS ProcessResult contract reads exitCode/standardOutput/standardError;
+        // serde field renames must keep the wire format aligned or every field is
+        // `undefined` in JS (regression: "Cannot read properties of undefined (reading 'trim')").
+        let result = ProcessResult {
+            exit_code: 0,
+            standard_output: "out".to_string(),
+            standard_error: "err".to_string(),
+        };
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["exitCode"], 0);
+        assert_eq!(json["standardOutput"], "out");
+        assert_eq!(json["standardError"], "err");
+        assert!(json.get("exit_code").is_none());
+        assert!(json.get("stdout").is_none());
     }
 
     #[test]
