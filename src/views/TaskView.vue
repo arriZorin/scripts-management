@@ -420,7 +420,7 @@ onMounted(() => {
       <div v-if="reconcile.missing.length > 0 || reconcile.orphaned.length > 0 || brokenTasks().length > 0" class="alert alert-warning mb-3" data-testid="reconcile-banner" role="alert">
         <AlertIcon kind="warning" />
         <div class="flex flex-row items-center justify-between w-full gap-2">
-          <span>{{ reconcile.missing.length }} task(s) unregistered{{ reconcile.orphaned.length > 0 ? `, ${reconcile.orphaned.length} orphaned registration(s)` : '' }}{{ brokenTasks().length > 0 ? `, ${brokenTasks().length} broken (missing script)` : '' }}</span>
+          <span>{{ reconcile.missing.length }} task(s) unregistered{{ reconcile.orphaned.length > 0 ? `, ${reconcile.orphaned.length} orphaned registration(s)` : '' }}{{ brokenTasks().length > 0 ? `, ${brokenTasks().length} script_missing` : '' }}</span>
           <div class="flex gap-2">
             <button v-if="brokenTasks().length > 0" class="btn btn-xs btn-error" data-testid="remove-broken-btn" @click="removeBrokenConfirm = true">Remove Broken</button>
             <button v-if="reconcile.missing.length > 0" class="btn btn-xs btn-warning" :disabled="repairing" data-testid="repair-tasks-btn" @click="repairTasks">{{ repairing ? 'Repairing...' : 'Repair All' }}</button>
@@ -435,7 +435,7 @@ onMounted(() => {
             <td>{{ task.name }}</td>
             <td>{{ scripts.find(script => script.id === task.scriptId)?.name ?? task.scriptId }}</td>
             <td>{{ scheduleLabel(task.schedule) }}</td>
-            <td><span v-if="hasMissingScript(task.scriptId)" class="badge badge-error" data-testid="script-missing-badge">broken</span><span v-else-if="isTaskMissing(task.id)" class="badge badge-warning" data-testid="scheduler-missing-badge">unregistered</span><span v-else class="badge" :class="task.enabled ? 'badge-success' : 'badge-ghost'">{{ task.enabled ? 'Enabled' : 'Disabled' }}</span></td>
+            <td><span v-if="hasMissingScript(task.scriptId)" class="badge badge-error" data-testid="script-missing-badge">script_missing</span><span v-else-if="isTaskMissing(task.id)" class="badge badge-warning" data-testid="scheduler-missing-badge">unregistered</span><span v-else class="badge" :class="task.enabled ? 'badge-success' : 'badge-ghost'">{{ task.enabled ? 'Enabled' : 'Disabled' }}</span></td>
             <td><div class="join">
               <template v-if="hasMissingScript(task.scriptId)">
                 <button class="btn btn-xs join-item" :data-testid="`edit-task-${task.id}`" @click="openEdit(task)">Edit</button>

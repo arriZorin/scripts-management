@@ -847,7 +847,7 @@ it('flags tasks whose script is missing from the scripts list', async () => {
 
   const badge = container.querySelector('[data-testid="task-row-task-1"] [data-testid="script-missing-badge"]')
   expect(badge).toBeTruthy()
-  expect(badge?.textContent).toContain('broken')
+  expect(badge?.textContent).toContain('script_missing')
   app.unmount()
 })
 
@@ -932,7 +932,7 @@ it('shows script missing as the single status when the script is unresolvable', 
   const row = container.querySelector('[data-testid="task-row-task-b"]')
   const badge = row?.querySelector('[data-testid="script-missing-badge"]')
   expect(badge).toBeTruthy()
-  expect(badge?.textContent).toContain('broken')
+  expect(badge?.textContent).toContain('script_missing')
   expect(row?.querySelector('[data-testid="scheduler-missing-badge"]')).toBeNull()
   expect(row?.textContent).not.toContain('Enabled')
   expect(row?.textContent).not.toContain('Disabled')
@@ -1033,7 +1033,7 @@ it('shows a broken count and Remove Broken action in the reconcile banner', asyn
 
   const banner = container.querySelector('[data-testid="reconcile-banner"]')
   expect(banner).toBeTruthy()
-  expect(banner?.textContent).toContain('1 broken')
+  expect(banner?.textContent).toContain('1 script_missing')
   expect(container.querySelector('[data-testid="remove-broken-btn"]')).toBeTruthy()
   app.unmount()
 })
@@ -1095,7 +1095,7 @@ it('flags tasks whose script file is missing on disk as script missing', async (
   const row = container.querySelector('[data-testid="task-row-task-b"]')
   const badge = row?.querySelector('[data-testid="script-missing-badge"]')
   expect(badge).toBeTruthy()
-  expect(badge?.textContent).toContain('broken')
+  expect(badge?.textContent).toContain('script_missing')
   expect(row?.textContent).not.toContain('Enabled')
   expect(container.querySelector('[data-testid="disable-task-task-b"]')).toBeTruthy()
   expect(container.querySelector('[data-testid="run-task-task-b"]')).toBeNull()

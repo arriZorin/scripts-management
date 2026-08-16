@@ -39,9 +39,9 @@
             <td :title="s.createdAt"><RelativeTime :date="s.createdAt" /></td>
             <td>
               <div class="join">
-                <button @click="openEditDialog(s)" :data-testid="`edit-script-${s.id}`" class="btn btn-xs btn-neutral join-item" :title="`Edit ${s.name}`">✏️</button>
-                <button @click="handleDelete(s)" :data-testid="`delete-script-${s.id}`" class="btn btn-xs btn-neutral join-item" :title="`Delete ${s.name}`">🗑️</button>
+                <button v-if="!missingScriptIds.includes(s.id)" @click="openEditDialog(s)" :data-testid="`edit-script-${s.id}`" class="btn btn-xs join-item" :title="`Edit ${s.name}`">Edit</button>
                 <button v-if="missingScriptIds.includes(s.id)" @click="handleRepair(s)" :data-testid="`repair-script-${s.id}`" class="btn btn-xs btn-warning join-item" :title="`Repair ${s.name}`">Repair</button>
+                <button @click="handleDelete(s)" :data-testid="`delete-script-${s.id}`" class="btn btn-xs btn-error join-item" :title="`Delete ${s.name}`">Delete</button>
               </div>
             </td>
           </tr>
