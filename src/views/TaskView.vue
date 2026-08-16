@@ -89,6 +89,10 @@ function isTaskMissing(taskId: string): boolean {
   return reconcile.value.missing.some(task => task.id === taskId)
 }
 
+function hasMissingScript(scriptId: string): boolean {
+  return !scripts.value.some(script => script.id === scriptId)
+}
+
 async function repairTaskRow(task: Task) {
   repairingTaskId.value = task.id
   operationError.value = ''
@@ -389,11 +393,16 @@ onMounted(() => {
         <tbody>
           <tr v-for="task in tasks" :key="task.id" :data-testid="`task-row-${task.id}`">
             <td>{{ task.name }}</td>
-            <td>{{ scripts.find(script => script.id === task.scriptId)?.name ?? task.scriptId }}<span v-if="!scripts.some(script => script.id === task.scriptId)" class="badge badge-error ml-2" data-testid="script-missing-badge">script missing</span></td>
+            <td>{{ scripts.find(script => script.id === task.scriptId)?.name ?? task.scriptId }}</td>
             <td>{{ scheduleLabel(task.schedule) }}</td>
-            <td><span v-if="!isTaskMissing(task.id)" class="badge" :class="task.enabled ? 'badge-success' : 'badge-ghost'">{{ task.enabled ? 'Enabled' : 'Disabled' }}</span><span v-else class="badge badge-warning" data-testid="scheduler-missing-badge">unregistered</span></td>
+            <td><span v-if="hasMissingScript(task.scriptId)" class="badge badge-error" data-testid="script-missing-badge">script missing</span><span v-else-if="isTaskMissing(task.id)" class="badge badge-warning" data-testid="scheduler-missing-badge">unregistered</span><span v-else class="badge" :class="task.enabled ? 'badge-success' : 'badge-ghost'">{{ task.enabled ? 'Enabled' : 'Disabled' }}</span></td>
             <td><div class="join">
-              <template v-if="isTaskMissing(task.id)">
+              <template v-if="hasMissingScript(task.scriptId)">
+                <button class="btn btn-xs join-item" :data-testid="`edit-task-${task.id}`" @click="openEdit(task)">Edit</button>
+                <button v-if="!isTaskMissing(task.id) && task.enabled" class="btn btn-xs join-item" :data-testid="`disable-task-${task.id}`" @click="toggle(task)">Disable</button>
+                <button class="btn btn-xs btn-error join-item" :data-testid="`delete-task-${task.id}`" @click="requestDelete(task)">Delete</button>
+              </template>
+              <template v-else-if="isTaskMissing(task.id)">
                 <button class="btn btn-xs btn-warning join-item" :data-testid="`repair-task-${task.id}`" :disabled="repairingTaskId === task.id || repairing" @click="repairTaskRow(task)">{{ repairingTaskId === task.id ? 'Repairing...' : 'Repair' }}</button>
                 <button class="btn btn-xs btn-error join-item" :data-testid="`delete-task-${task.id}`" @click="requestDelete(task)">Delete</button>
               </template>
