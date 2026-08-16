@@ -9,10 +9,12 @@ import { INTERVAL_UNITS, todayDateString } from '../models/Task'
 import type { TaskRun, TaskRunStatus } from '../models/TaskRun'
 import { listRegisteredTasks, reconcileTasks, repairMissingTasks, repairTask } from '../services/TaskReconciler'
 import type { ReconcileResult } from '../services/TaskReconciler'
+import { findMissingScriptIds } from '../services/scriptReconciliation'
 import { errorMessage } from '../services/errorMessage'
 
-const { scriptRepository, taskRepository, taskExecutor, taskScheduler, logger, taskRunRepository, taskRunRecorder } = useAppContext()
+const { scriptRepository, taskRepository, taskExecutor, taskScheduler, logger, taskRunRepository, taskRunRecorder, scriptPathChecker } = useAppContext()
 const scripts = ref<Script[]>([])
+const missingPathScriptIds = ref<string[]>([])
 const tasks = ref<Task[]>([])
 const isEditing = ref(false)
 const editingId = ref<string | null>(null)
@@ -40,6 +42,15 @@ async function loadScripts() {
   } catch {
     scripts.value = []
   }
+  void refreshMissingScriptPaths()
+}
+
+async function refreshMissingScriptPaths() {
+  try {
+    missingPathScriptIds.value = await findMissingScriptIds(scripts.value, scriptPathChecker.exists)
+  } catch {
+    missingPathScriptIds.value = []
+  }
 }
 
 function emptyForm(): TaskInput {
@@ -54,6 +65,7 @@ function emptyForm(): TaskInput {
 }
 
 async function load() {
+  loadScripts()
   try {
     tasks.value = await taskRepository.list()
   } catch {
@@ -76,7 +88,12 @@ async function repairTasks() {
   repairing.value = true
   operationError.value = ''
   try {
-    await repairMissingTasks(tasks.value, registeredTasks.value, scripts.value, taskScheduler)
+    await repairMissingTasks(
+      tasks.value.filter(task => !hasMissingScript(task.scriptId)),
+      registeredTasks.value,
+      scripts.value,
+      taskScheduler,
+    )
     await load()
     operationResult.value = `Repaired ${reconcile.value.missing.length} task(s).`
   } catch (cause) {
@@ -91,7 +108,7 @@ function isTaskMissing(taskId: string): boolean {
 }
 
 function hasMissingScript(scriptId: string): boolean {
-  return !scripts.value.some(script => script.id === scriptId)
+  return !scripts.value.some(script => script.id === scriptId) || missingPathScriptIds.value.includes(scriptId)
 }
 
 function brokenTasks(): Task[] {
@@ -381,7 +398,6 @@ function scheduleLabel(schedule: Schedule): string {
 }
 
 onMounted(() => {
-  loadScripts()
   load()
   loadRuns()
 })
@@ -486,7 +502,7 @@ onMounted(() => {
           <label class="label">Name</label>
           <input v-model="form.name" class="input input-bordered w-full" data-testid="task-name-input" placeholder="Daily backup" />
           <label class="label">Script</label>
-          <select v-model="form.scriptId" class="select select-bordered w-full" data-testid="script-select"><option v-if="form.scriptId && !scripts.some(script => script.id === form.scriptId)" :value="form.scriptId" disabled data-testid="script-missing-placeholder">Script missing — select a replacement</option><option v-for="script in scripts" :key="script.id" :value="script.id">{{ script.name }}</option></select>
+          <select v-model="form.scriptId" class="select select-bordered w-full" data-testid="script-select"><option v-if="form.scriptId && !scripts.some(script => script.id === form.scriptId)" :value="form.scriptId" disabled data-testid="script-missing-placeholder">Script missing — select a replacement</option><option v-for="script in scripts" :key="script.id" :value="script.id">{{ script.name }}<template v-if="missingPathScriptIds.includes(script.id)"> (path missing)</template></option></select>
           <label class="label">Python interpreter</label>
           <input v-model="form.interpreter" class="input input-bordered w-full" data-testid="interpreter-input" placeholder="python" />
           <label class="label">Arguments</label>

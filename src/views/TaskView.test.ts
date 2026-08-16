@@ -7,6 +7,7 @@ import type { Task, TaskInput } from '../models/Task'
 import type { TaskRun } from '../models/TaskRun'
 import { TaskRunRecorder } from '../services/TaskRunRecorder'
 import type { TaskRunRepository } from '../services/TaskRunRepository'
+import type { ScriptPathChecker } from '../services/scriptPathChecker'
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
 import { invoke } from '@tauri-apps/api/core'
@@ -146,7 +147,7 @@ class FakeScriptRepository {
   async list() { return [...this.items] }
 }
 
-function mountView(repository: FakeTaskRepository, executor = new FakeTaskExecutor(), scheduler = new FakeTaskScheduler(), logger = new FakeLogger(), runRepository = new FakeTaskRunRepository(), scriptRepository: FakeScriptRepository | null = null) {
+function mountView(repository: FakeTaskRepository, executor = new FakeTaskExecutor(), scheduler = new FakeTaskScheduler(), logger = new FakeLogger(), runRepository = new FakeTaskRunRepository(), scriptRepository: FakeScriptRepository | null = null, pathChecker: ScriptPathChecker = { exists: async () => true }) {
   const container = document.createElement('div')
   document.body.appendChild(container)
   const app = createApp(TaskView)
@@ -158,6 +159,7 @@ function mountView(repository: FakeTaskRepository, executor = new FakeTaskExecut
     taskRunRepository: runRepository,
     taskRunRecorder: new TaskRunRecorder(runRepository),
     scriptRepository: (scriptRepository ?? new FakeScriptRepository()) as never,
+    scriptPathChecker: pathChecker,
   }))
   app.mount(container)
   return { container, app, runRepository }
@@ -1076,5 +1078,45 @@ it('cancelling the remove-broken dialog keeps broken tasks', async () => {
   expect(repository.items.map(task => task.id)).toEqual(['task-b'])
   expect(scheduler.deletes).toEqual([])
   expect(container.querySelector('[data-testid="remove-broken-dialog"]')).toBeNull()
+  app.unmount()
+})
+
+it('flags tasks whose script file is missing on disk as script missing', async () => {
+  const repository = new FakeTaskRepository()
+  repository.items.push(task({ id: 'task-b', name: 'Broken', scriptId: script.id }))
+  mockedInvoke.mockImplementation((command: string) => {
+    if (command === 'list_scheduled_tasks') return Promise.resolve(['ScriptsManagement\\task-b'])
+    return Promise.reject(`unmocked command: ${command}`)
+  })
+  const pathChecker = { exists: async (path: string) => path !== script.path }
+  const { container, app } = mountView(repository, new FakeTaskExecutor(), new FakeTaskScheduler(), new FakeLogger(), new FakeTaskRunRepository(), null, pathChecker)
+  await flush()
+
+  const row = container.querySelector('[data-testid="task-row-task-b"]')
+  const badge = row?.querySelector('[data-testid="script-missing-badge"]')
+  expect(badge).toBeTruthy()
+  expect(badge?.textContent).toContain('script missing')
+  expect(row?.textContent).not.toContain('Enabled')
+  expect(container.querySelector('[data-testid="disable-task-task-b"]')).toBeTruthy()
+  expect(container.querySelector('[data-testid="run-task-task-b"]')).toBeNull()
+  expect(container.querySelector('[data-testid="repair-task-task-b"]')).toBeNull()
+  app.unmount()
+})
+
+it('repair all skips tasks whose script file is missing on disk', async () => {
+  const repository = new FakeTaskRepository()
+  repository.items.push(task({ id: 'task-a', name: 'Healthy' }))
+  repository.items.push(task({ id: 'task-b', name: 'Broken', scriptId: 'script-2' }))
+  const scriptRepo = new FakeScriptRepository()
+  scriptRepo.items.push({ id: 'script-2', name: 'gone.py', path: 'C:/scripts/gone.py', type: 'python', createdAt: '2024-01-01T00:00:00.000Z', updatedAt: '2024-01-01T00:00:00.000Z' })
+  const pathChecker = { exists: async (path: string) => path !== 'C:/scripts/gone.py' }
+  const scheduler = new FakeTaskScheduler()
+  const { container, app } = mountView(repository, new FakeTaskExecutor(), scheduler, new FakeLogger(), new FakeTaskRunRepository(), scriptRepo, pathChecker)
+  await flush()
+
+  ;(container.querySelector('[data-testid="repair-tasks-btn"]') as HTMLElement).click()
+  await flush()
+
+  expect(scheduler.creates.map(created => created.id)).toEqual(['task-a'])
   app.unmount()
 })
