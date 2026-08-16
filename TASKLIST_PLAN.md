@@ -323,3 +323,23 @@ Implementation notes:
 - [ ] Verify script failure appears in history
 - [ ] Verify no unrelated files are changed
 - [ ] Commit each completed TDD slice
+
+## System Info — Runtime Requirements Check (uv + Python)
+
+Plan: `.hermes/plans/20260816_163442-systeminfo-uv-runtime-check.tauri.md` (adapted from the winui-todo-app plan — Tauri/Vue/TS translation, not .NET).
+
+**Goal:** On a brand-new Windows 11 host, the app checks for a usable Python ≥ 3.11 and surfaces unmet requirements with a **Resolve** button. Resolve cascades: **use an existing host Python → install via uv → install Python directly (official installer → winget) → Deferred (try later)**. No UAC in the default path, no PATH pollution.
+
+- [ ] Slice 1: Contract types (`RequirementStatus`, `RequirementCheckResult`, `ProcessResult`, `PythonInstall`) + `VersionRequirement` constraint parser + tests
+- [ ] Slice 2: Rust primitive commands (`run_process`, `find_all_in_path`, `query_python_registry`, `download_to_file`, `extract_zip`, `default_uv_install_dir`) + cargo tests (deps: reqwest/zip/winreg)
+- [ ] Slice 3: TS I/O seams (`ProcessRunner`/`TauriProcessRunner`, `FileDownloader`/`TauriFileDownloader`, `EnvironmentQuery`/`TauriEnvironmentQuery`)
+- [ ] Slice 4: `PythonLocator` probe-based Layer 1 detection + WindowsApps rejection + tests
+- [ ] Slice 5: `UvBootstrapper` portable-zip install + tests
+- [ ] Slice 6: `DirectPythonInstaller` (official user-scope → winget) + tests
+- [ ] Slice 7: `PythonRuntimeCheck` cascade facade (check/resolve/deferred/failed) + tests
+- [ ] Slice 8: Full suite + real-host smoke (`uv --version`, `uv python find ">=3.11"`)
+- [ ] Slice 9: UI — Home System Info card runtime row (badge, message, Resolve when not met) + tests
+
+**Acceptance:** Home System Info card shows the Python runtime requirement with status (met / notMet / failed / deferred), a human message + resolved path when met, and a Resolve button whenever status is not met. Resolve cascades through host Python → uv → direct installer → deferred without UAC in the default path; every successful resolve re-checks before reporting success; unexpected errors surface as `failed` (never raw exceptions in UI).
+
+**Commit convention:** one TDD slice per commit, `feat(slice): ...`, build verified + tests green.
