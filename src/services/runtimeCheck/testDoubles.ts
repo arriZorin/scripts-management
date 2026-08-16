@@ -39,6 +39,7 @@ export class FakeEnvironmentQuery implements EnvironmentQuery {
 export class FakeFileDownloader implements FileDownloader {
   downloads: { url: string; destPath: string }[] = []
   extractCalls: { zipPath: string; destDir: string }[] = []
+  deletedFiles: string[] = []
 
   constructor(
     private readonly onDownloaded: (destPath: string) => void = () => {},
@@ -51,5 +52,9 @@ export class FakeFileDownloader implements FileDownloader {
 
   async extractZip(zipPath: string, destDir: string): Promise<void> {
     this.extractCalls.push({ zipPath, destDir })
+  }
+
+  async deleteFile(path: string): Promise<void> {
+    this.deletedFiles.push(path)
   }
 }

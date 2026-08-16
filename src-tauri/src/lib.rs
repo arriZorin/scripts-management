@@ -387,7 +387,8 @@ pub fn run() {
             systeminfo::query_python_registry,
             systeminfo::default_uv_install_dir,
             systeminfo::download_to_file,
-            systeminfo::extract_zip
+            systeminfo::extract_zip,
+            systeminfo::delete_file
         ])
         .setup(|app| {
             let dir = app.path().app_local_data_dir()?;

@@ -244,6 +244,14 @@ pub async fn extract_zip(zip_path: String, dest_dir: String) -> Result<(), Strin
         .map_err(|e| format!("extract_zip task panicked: {e}"))?
 }
 
+#[tauri::command]
+pub fn delete_file(path: String) -> Result<(), String> {
+    if path.is_empty() {
+        return Err("path cannot be empty".to_string());
+    }
+    std::fs::remove_file(&path).map_err(|e| format!("failed to delete '{path}': {e}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
