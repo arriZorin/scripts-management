@@ -1022,3 +1022,59 @@ it('shows a replacement placeholder in the script selector when editing a script
   expect(placeholder?.textContent).toContain('select a replacement')
   app.unmount()
 })
+
+it('shows a broken count and Remove Broken action in the reconcile banner', async () => {
+  const repository = new FakeTaskRepository()
+  repository.items.push(task({ id: 'task-b', name: 'Broken', scriptId: 'gone' }))
+  const { container, app } = mountView(repository)
+  await flush()
+
+  const banner = container.querySelector('[data-testid="reconcile-banner"]')
+  expect(banner).toBeTruthy()
+  expect(banner?.textContent).toContain('1 broken')
+  expect(container.querySelector('[data-testid="remove-broken-btn"]')).toBeTruthy()
+  app.unmount()
+})
+
+it('removes broken tasks through the banner confirm dialog', async () => {
+  const repository = new FakeTaskRepository()
+  repository.items.push(task({ id: 'task-a', name: 'Healthy', scriptId: script.id }))
+  repository.items.push(task({ id: 'task-b', name: 'Broken', scriptId: 'gone' }))
+  mockedInvoke.mockImplementation((command: string) => {
+    if (command === 'list_scheduled_tasks') return Promise.resolve(['ScriptsManagement\\task-a'])
+    return Promise.reject(`unmocked command: ${command}`)
+  })
+  const scheduler = new FakeTaskScheduler()
+  const { container, app } = mountView(repository, new FakeTaskExecutor(), scheduler)
+  await flush()
+
+  ;(container.querySelector('[data-testid="remove-broken-btn"]') as HTMLElement).click()
+  await nextTick()
+  expect(container.querySelector('[data-testid="remove-broken-dialog"]')).toBeTruthy()
+  ;(container.querySelector('[data-testid="confirm-remove-broken-btn"]') as HTMLElement).click()
+  await flush()
+
+  expect(repository.items.map(task => task.id)).toEqual(['task-a'])
+  expect(scheduler.deletes).toEqual(['task-b'])
+  expect(container.querySelector('[data-testid="reconcile-banner"]')).toBeNull()
+  expect(container.querySelector('[data-testid="task-operation-result"]')?.textContent).toContain('Removed 1 broken')
+  app.unmount()
+})
+
+it('cancelling the remove-broken dialog keeps broken tasks', async () => {
+  const repository = new FakeTaskRepository()
+  repository.items.push(task({ id: 'task-b', name: 'Broken', scriptId: 'gone' }))
+  const scheduler = new FakeTaskScheduler()
+  const { container, app } = mountView(repository, new FakeTaskExecutor(), scheduler)
+  await flush()
+
+  ;(container.querySelector('[data-testid="remove-broken-btn"]') as HTMLElement).click()
+  await nextTick()
+  ;(container.querySelector('[data-testid="cancel-remove-broken-btn"]') as HTMLElement).click()
+  await flush()
+
+  expect(repository.items.map(task => task.id)).toEqual(['task-b'])
+  expect(scheduler.deletes).toEqual([])
+  expect(container.querySelector('[data-testid="remove-broken-dialog"]')).toBeNull()
+  app.unmount()
+})

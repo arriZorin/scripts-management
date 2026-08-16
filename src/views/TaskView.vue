@@ -31,6 +31,7 @@ const registeredTasks = ref<string[]>([])
 const reconcile = ref<ReconcileResult>({ missing: [], orphaned: [] })
 const repairing = ref(false)
 const repairingTaskId = ref<string | null>(null)
+const removeBrokenConfirm = ref(false)
 
 async function loadScripts() {
   if (!scriptRepository) return
@@ -91,6 +92,26 @@ function isTaskMissing(taskId: string): boolean {
 
 function hasMissingScript(scriptId: string): boolean {
   return !scripts.value.some(script => script.id === scriptId)
+}
+
+function brokenTasks(): Task[] {
+  return tasks.value.filter(task => hasMissingScript(task.scriptId))
+}
+
+async function confirmRemoveBroken() {
+  removeBrokenConfirm.value = false
+  operationError.value = ''
+  try {
+    const broken = brokenTasks()
+    for (const task of broken) {
+      await taskRepository.delete(task.id)
+      await taskScheduler.delete(task.id)
+    }
+    await load()
+    operationResult.value = `Removed ${broken.length} broken task(s).`
+  } catch (cause) {
+    operationError.value = errorText(cause, 'Failed to remove broken tasks.')
+  }
 }
 
 async function repairTaskRow(task: Task) {
@@ -380,11 +401,14 @@ onMounted(() => {
     <main class="region body card p-4 m-2 rounded border border-gray-300 bg-white min-h-[200px] dark:bg-[#333333] dark:border-[#404040]">
       <div v-if="operationResult" class="alert alert-success mb-3" data-testid="task-operation-result" role="alert"><AlertIcon kind="success" /><span>{{ operationResult }}</span></div>
       <div v-if="operationError" class="alert alert-error mb-3" data-testid="task-operation-error" role="alert"><AlertIcon kind="error" /><span>{{ operationError }}</span></div>
-      <div v-if="reconcile.missing.length > 0 || reconcile.orphaned.length > 0" class="alert alert-warning mb-3" data-testid="reconcile-banner" role="alert">
+      <div v-if="reconcile.missing.length > 0 || reconcile.orphaned.length > 0 || brokenTasks().length > 0" class="alert alert-warning mb-3" data-testid="reconcile-banner" role="alert">
         <AlertIcon kind="warning" />
         <div class="flex flex-row items-center justify-between w-full gap-2">
-          <span>{{ reconcile.missing.length }} task(s) missing from Windows scheduler{{ reconcile.orphaned.length > 0 ? `, ${reconcile.orphaned.length} orphaned registration(s)` : '' }}</span>
-          <button v-if="reconcile.missing.length > 0" class="btn btn-xs btn-warning" :disabled="repairing" data-testid="repair-tasks-btn" @click="repairTasks">{{ repairing ? 'Repairing...' : 'Repair All' }}</button>
+          <span>{{ reconcile.missing.length }} task(s) unregistered{{ reconcile.orphaned.length > 0 ? `, ${reconcile.orphaned.length} orphaned registration(s)` : '' }}{{ brokenTasks().length > 0 ? `, ${brokenTasks().length} broken (missing script)` : '' }}</span>
+          <div class="flex gap-2">
+            <button v-if="brokenTasks().length > 0" class="btn btn-xs btn-error" data-testid="remove-broken-btn" @click="removeBrokenConfirm = true">Remove Broken</button>
+            <button v-if="reconcile.missing.length > 0" class="btn btn-xs btn-warning" :disabled="repairing" data-testid="repair-tasks-btn" @click="repairTasks">{{ repairing ? 'Repairing...' : 'Repair All' }}</button>
+          </div>
         </div>
       </div>
       <div v-if="tasks.length === 0" class="alert alert-info" data-testid="task-empty-state" role="alert"><AlertIcon kind="info" /><span>No tasks yet.</span></div>
@@ -515,6 +539,10 @@ onMounted(() => {
 
     <dialog v-if="clearRunsTarget" class="modal modal-open" data-testid="runs-clear-dialog" role="dialog">
       <div class="modal-box"><h3 class="text-lg font-bold">Clear History</h3><p class="py-4">Remove all execution history?</p><div class="modal-action"><button class="btn btn-error" data-testid="confirm-runs-clear-btn" @click="confirmClearRuns">Clear</button><button class="btn" data-testid="cancel-runs-clear-btn" @click="clearRunsTarget = false">Cancel</button></div></div>
+    </dialog>
+
+    <dialog v-if="removeBrokenConfirm" class="modal modal-open" data-testid="remove-broken-dialog" role="dialog">
+      <div class="modal-box"><h3 class="text-lg font-bold">Remove Broken Tasks</h3><p class="py-4">Remove {{ brokenTasks().length }} task(s) with missing scripts? Their Windows registrations will also be removed.</p><div class="modal-action"><button class="btn btn-error" data-testid="confirm-remove-broken-btn" @click="confirmRemoveBroken">Remove</button><button class="btn" data-testid="cancel-remove-broken-btn" @click="removeBrokenConfirm = false">Cancel</button></div></div>
     </dialog>
   </div>
 </template>
