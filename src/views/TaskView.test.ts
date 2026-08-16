@@ -1007,3 +1007,18 @@ it('disables a script-missing registered task from its row', async () => {
   expect(container.querySelector('[data-testid="disable-task-task-b"]')).toBeNull()
   app.unmount()
 })
+
+it('shows a replacement placeholder in the script selector when editing a script-missing task', async () => {
+  const repository = new FakeTaskRepository()
+  repository.items.push(task({ id: 'task-b', name: 'Broken', scriptId: 'gone' }))
+  const { container, app } = mountView(repository)
+  await flush()
+
+  ;(container.querySelector('[data-testid="edit-task-task-b"]') as HTMLElement).click()
+  await flush()
+
+  const placeholder = container.querySelector('[data-testid="script-select"] [data-testid="script-missing-placeholder"]')
+  expect(placeholder).toBeTruthy()
+  expect(placeholder?.textContent).toContain('select a replacement')
+  app.unmount()
+})

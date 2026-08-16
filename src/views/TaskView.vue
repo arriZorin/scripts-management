@@ -462,7 +462,7 @@ onMounted(() => {
           <label class="label">Name</label>
           <input v-model="form.name" class="input input-bordered w-full" data-testid="task-name-input" placeholder="Daily backup" />
           <label class="label">Script</label>
-          <select v-model="form.scriptId" class="select select-bordered w-full" data-testid="script-select"><option v-for="script in scripts" :key="script.id" :value="script.id">{{ script.name }}</option></select>
+          <select v-model="form.scriptId" class="select select-bordered w-full" data-testid="script-select"><option v-if="form.scriptId && !scripts.some(script => script.id === form.scriptId)" :value="form.scriptId" disabled data-testid="script-missing-placeholder">Script missing — select a replacement</option><option v-for="script in scripts" :key="script.id" :value="script.id">{{ script.name }}</option></select>
           <label class="label">Python interpreter</label>
           <input v-model="form.interpreter" class="input input-bordered w-full" data-testid="interpreter-input" placeholder="python" />
           <label class="label">Arguments</label>
