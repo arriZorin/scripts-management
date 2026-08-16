@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import AlertIcon from '../components/icons/AlertIcon.vue'
 import { useAppContext } from '../composables/useAppContext'
 import { useAutoDismiss } from '../composables/useAutoDismiss'
+import { scriptDisplayLabels, sortScripts } from '../services/scriptLabels'
 import type { Script } from '../models/Script'
 import type { IntervalUnit, Schedule, Task, TaskInput } from '../models/Task'
 import { INTERVAL_UNITS, todayDateString } from '../models/Task'
@@ -14,6 +15,12 @@ import { errorMessage } from '../services/errorMessage'
 
 const { scriptRepository, taskRepository, taskExecutor, taskScheduler, logger, taskRunRepository, taskRunRecorder, scriptPathChecker } = useAppContext()
 const scripts = ref<Script[]>([])
+const sortedScripts = computed(() => sortScripts(scripts.value))
+const scriptLabels = computed(() => scriptDisplayLabels(scripts.value))
+
+function scriptLabelOf(scriptId: string): string {
+  return scriptLabels.value.get(scriptId) ?? scriptId
+}
 const missingPathScriptIds = ref<string[]>([])
 const tasks = ref<Task[]>([])
 const isEditing = ref(false)
@@ -56,7 +63,7 @@ async function refreshMissingScriptPaths() {
 function emptyForm(): TaskInput {
   return {
     name: '',
-    scriptId: scripts.value[0]?.id ?? '',
+    scriptId: sortedScripts.value[0]?.id ?? '',
     interpreter: 'python',
     arguments: [],
     schedule: { type: 'daily', startAt: `${todayDateString()}T08:00:00` },
@@ -433,7 +440,7 @@ onMounted(() => {
         <tbody>
           <tr v-for="task in tasks" :key="task.id" :data-testid="`task-row-${task.id}`">
             <td>{{ task.name }}</td>
-            <td>{{ scripts.find(script => script.id === task.scriptId)?.name ?? task.scriptId }}</td>
+            <td>{{ scriptLabelOf(task.scriptId) }}</td>
             <td>{{ scheduleLabel(task.schedule) }}</td>
             <td><span v-if="hasMissingScript(task.scriptId)" class="badge badge-error" data-testid="script-missing-badge">script_missing</span><span v-else-if="isTaskMissing(task.id)" class="badge badge-warning" data-testid="scheduler-missing-badge">unregistered</span><span v-else class="badge" :class="task.enabled ? 'badge-success' : 'badge-ghost'">{{ task.enabled ? 'Enabled' : 'Disabled' }}</span></td>
             <td><div class="join">
@@ -502,7 +509,7 @@ onMounted(() => {
           <label class="label">Name</label>
           <input v-model="form.name" class="input input-bordered w-full" data-testid="task-name-input" placeholder="Daily backup" />
           <label class="label">Script</label>
-          <select v-model="form.scriptId" class="select select-bordered w-full" data-testid="script-select"><option v-if="form.scriptId && !scripts.some(script => script.id === form.scriptId)" :value="form.scriptId" disabled data-testid="script-missing-placeholder">Script missing — select a replacement</option><option v-for="script in scripts" :key="script.id" :value="script.id">{{ script.name }}<template v-if="missingPathScriptIds.includes(script.id)"> (path missing)</template></option></select>
+          <select v-model="form.scriptId" class="select select-bordered w-full" data-testid="script-select"><option v-if="form.scriptId && !scripts.some(script => script.id === form.scriptId)" :value="form.scriptId" disabled data-testid="script-missing-placeholder">Script missing — select a replacement</option><option v-for="script in sortedScripts" :key="script.id" :value="script.id" :title="script.path">{{ scriptLabelOf(script.id) }}<template v-if="missingPathScriptIds.includes(script.id)"> (path missing)</template></option></select>
           <label class="label">Python interpreter</label>
           <input v-model="form.interpreter" class="input input-bordered w-full" data-testid="interpreter-input" placeholder="python" />
           <label class="label">Arguments</label>

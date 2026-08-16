@@ -29,7 +29,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="s in scripts" :key="s.id">
+          <tr v-for="s in sortedScripts" :key="s.id">
             <td>{{ s.name }}</td>
             <td>
               {{ s.path }}
@@ -130,6 +130,7 @@ import AlertIcon from '../components/icons/AlertIcon.vue';
 import { useAppContext } from '../composables/useAppContext';
 import { useAutoDismiss } from '../composables/useAutoDismiss';
 import { useScripts } from '../services/scriptImport/useScripts';
+import { sortScripts } from '../services/scriptLabels';
 import { findMissingScriptIds } from '../services/scriptReconciliation';
 import { onMounted } from 'vue';
 import type { Script } from '../models/Script';
@@ -149,6 +150,7 @@ const RelativeTime = defineComponent({
 const { scriptRepository: repository, picker, scanner, taskRepository, taskScheduler, scriptPathChecker } = useAppContext();
 
 const { scripts, error, busy, addScriptFile, addScriptFolder, load } = useScripts({ repository, picker, scanner });
+const sortedScripts = computed(() => sortScripts(scripts.value));
 const missingScriptIds = ref<string[]>([]);
 
 async function loadAndReconcile() {

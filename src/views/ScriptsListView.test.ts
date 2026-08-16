@@ -167,7 +167,8 @@ describe('ScriptsListView', () => {
     const rows = Array.from(container.querySelectorAll('tbody tr'))
     const listItems = rows.map((row) => row.textContent)
     expect(listItems[0]).toContain('backup.pyC:/scripts/backup.py')
-    expect(listItems[0]).toContain('✏️🗑️')
+    expect(listItems[0]).toContain('Edit')
+    expect(listItems[0]).toContain('Delete')
     expect(container.querySelector('.region.body')?.textContent).toContain('Added 0 script(s), skipped 1.')
 
     app.unmount()
@@ -224,6 +225,37 @@ describe('ScriptsListView', () => {
     expect(secondRowCells[1]).toContain('C:/a/y.py')
     expect(secondRowCells[2]).toBe('python')
     expect(secondRowCells[3]).toBeTruthy()
+
+    app.unmount()
+  })
+
+  it('sorts rows by name when the repository returns scripts in a different order', async () => {
+    const repo = new FakeScriptRepository([
+      {
+        id: 'z-1',
+        name: 'zebra.py',
+        path: 'C:/scripts/zebra.py',
+        type: 'python',
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'a-1',
+        name: 'alpha.py',
+        path: 'C:/scripts/alpha.py',
+        type: 'python',
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+      },
+    ])
+    const { container, app } = mountView(repo, new FakeScriptPicker(), new FakeFileScanner())
+    await nextTick()
+    await flush()
+
+    const rows = Array.from(container.querySelectorAll('tbody tr'))
+    expect(rows).toHaveLength(2)
+    expect(rows[0].textContent).toContain('alpha.py')
+    expect(rows[1].textContent).toContain('zebra.py')
 
     app.unmount()
   })

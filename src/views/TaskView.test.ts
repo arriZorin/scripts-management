@@ -295,6 +295,60 @@ describe('TaskView', () => {
   })
 })
 
+describe('script selector sorting and duplicate disambiguation', () => {
+  it('sorts dropdown options alphabetically by name', async () => {
+    const repository = new FakeTaskRepository()
+    const scriptRepository = new FakeScriptRepository()
+    scriptRepository.items.push(
+      { id: 'script-z', name: 'zebra.py', path: 'C:/scripts/zebra.py', type: 'python', createdAt: '2024-01-01T00:00:00.000Z', updatedAt: '2024-01-01T00:00:00.000Z' },
+      { id: 'script-a', name: 'alpha.py', path: 'C:/scripts/alpha.py', type: 'python', createdAt: '2024-01-01T00:00:00.000Z', updatedAt: '2024-01-01T00:00:00.000Z' },
+    )
+    const { container, app } = mountView(repository, new FakeTaskExecutor(), new FakeTaskScheduler(), new FakeLogger(), new FakeTaskRunRepository(), scriptRepository)
+    await flush()
+
+    ;(container.querySelector('[data-testid="new-task-btn"]') as HTMLElement).click()
+    await flush()
+
+    const options = [...container.querySelectorAll('[data-testid="script-select"] option')].map(option => option.textContent)
+    expect(options).toEqual(['alpha.py', 'backup.py', 'zebra.py'])
+    app.unmount()
+  })
+
+  it('qualifies duplicate script names with their path in the dropdown', async () => {
+    const repository = new FakeTaskRepository()
+    const scriptRepository = new FakeScriptRepository()
+    scriptRepository.items.push(
+      { id: 'script-dup-1', name: 'backup.py', path: 'D:/other/backup.py', type: 'python', createdAt: '2024-01-01T00:00:00.000Z', updatedAt: '2024-01-01T00:00:00.000Z' },
+    )
+    const { container, app } = mountView(repository, new FakeTaskExecutor(), new FakeTaskScheduler(), new FakeLogger(), new FakeTaskRunRepository(), scriptRepository)
+    await flush()
+
+    ;(container.querySelector('[data-testid="new-task-btn"]') as HTMLElement).click()
+    await flush()
+
+    const options = [...container.querySelectorAll('[data-testid="script-select"] option')].map(option => option.textContent)
+    expect(options).toContain('backup.py — C:/scripts/backup.py')
+    expect(options).toContain('backup.py — D:/other/backup.py')
+    expect(options).not.toContain('backup.py')
+    app.unmount()
+  })
+
+  it('shows path-qualified script labels in the task table Script column for duplicates', async () => {
+    const repository = new FakeTaskRepository()
+    await repository.create({ name: 'Dup task', scriptId: 'script-dup-1', interpreter: 'python', arguments: [], schedule: { type: 'daily', startAt: '2026-08-14T08:00:00' }, enabled: true })
+    const scriptRepository = new FakeScriptRepository()
+    scriptRepository.items.push(
+      { id: 'script-dup-1', name: 'backup.py', path: 'D:/other/backup.py', type: 'python', createdAt: '2024-01-01T00:00:00.000Z', updatedAt: '2024-01-01T00:00:00.000Z' },
+    )
+    const { container, app } = mountView(repository, new FakeTaskExecutor(), new FakeTaskScheduler(), new FakeLogger(), new FakeTaskRunRepository(), scriptRepository)
+    await flush()
+
+    const row = container.querySelector('[data-testid="task-row-task-1"]')
+    expect(row?.textContent).toContain('backup.py — D:/other/backup.py')
+    app.unmount()
+  })
+})
+
 it('edits, toggles, and deletes a task through row actions', async () => {
   const repository = new FakeTaskRepository()
   await repository.create({ name: 'Existing', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', startAt: '2026-08-14T08:00:00' }, enabled: true })

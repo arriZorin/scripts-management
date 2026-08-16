@@ -297,6 +297,19 @@ Implementation notes:
 
 2026-08-14: Home dashboard implemented — `dashboardStats.ts` pure metric aggregation (totalScripts, totalTasks, enabledTasks, totalRuns, successRuns, failedRuns, successRate rounded, ignoring in-flight running runs), wired into `HomeView` via the repositories App already injects (taskRepository/taskRunRepository/scriptRepository). Follows the daisyUI `stats shadow` card layout from the reference.
 
+## Script Labels — Sorted + Disambiguated
+
+- [x] `sortScripts` pure helper — case-insensitive name sort, path tiebreak (Windows-safe duplicate grouping)
+- [x] `scriptDisplayLabels` helper — names that appear more than once (case-insensitive) render as `name — full path`
+- [x] Task dialog script dropdown: options sorted alphabetically (restores native type-ahead jump), duplicates path-qualified, `title` attr shows full path
+- [x] Task table Script column: same disambiguated labels (no more ambiguous `backup.py` columns)
+- [x] Scripts List table: rows sorted by name
+- [x] New task form defaults to the alphabetically-first script
+
+**Acceptance:** Users can find any script by typing its name in the picker, and same-named scripts in different folders are visually distinguishable everywhere. ✅ Verified: 218/218 frontend tests green + `bun run build` green (2026-08-16). Also fixed a stale pre-existing ScriptsListView test that expected emoji `✏️🗑️` button icons replaced by text buttons (was failing at HEAD before this slice).
+
+2026-08-16: Implemented as one TDD slice (RED helper/view tests → GREEN helpers + view wiring), committed green.
+
 ## Phase 9 — Final Verification
 
 - [ ] Full frontend test suite
