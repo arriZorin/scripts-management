@@ -435,7 +435,7 @@ onMounted(() => {
             <td>{{ task.name }}</td>
             <td>{{ scripts.find(script => script.id === task.scriptId)?.name ?? task.scriptId }}</td>
             <td>{{ scheduleLabel(task.schedule) }}</td>
-            <td><span v-if="hasMissingScript(task.scriptId)" class="badge badge-error" data-testid="script-missing-badge">script missing</span><span v-else-if="isTaskMissing(task.id)" class="badge badge-warning" data-testid="scheduler-missing-badge">unregistered</span><span v-else class="badge" :class="task.enabled ? 'badge-success' : 'badge-ghost'">{{ task.enabled ? 'Enabled' : 'Disabled' }}</span></td>
+            <td><span v-if="hasMissingScript(task.scriptId)" class="badge badge-error" data-testid="script-missing-badge">broken</span><span v-else-if="isTaskMissing(task.id)" class="badge badge-warning" data-testid="scheduler-missing-badge">unregistered</span><span v-else class="badge" :class="task.enabled ? 'badge-success' : 'badge-ghost'">{{ task.enabled ? 'Enabled' : 'Disabled' }}</span></td>
             <td><div class="join">
               <template v-if="hasMissingScript(task.scriptId)">
                 <button class="btn btn-xs join-item" :data-testid="`edit-task-${task.id}`" @click="openEdit(task)">Edit</button>

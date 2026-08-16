@@ -265,7 +265,7 @@ Implementation notes:
 - [x] Cascade delete: deleting a script warns about linked tasks and removes them (JSON + Windows registration) first — no orphaned Windows tasks for deleted scripts
 - [ ] Handle app closed/restarted scenarios
 - [ ] Handle machine restart
-- [x] Handle deleted/moved scripts (single `script missing` status badge with priority over unregistered; row actions limited to Edit + Disable-if-registered-and-enabled + Delete; Run Now/Repair hidden; edit modal shows "Script missing — select a replacement" placeholder; reconcile banner counts broken tasks and offers batch Remove Broken with confirm dialog)
+- [x] Handle deleted/moved scripts (single `broken` status badge with priority over unregistered; row actions limited to Edit + Disable-if-registered-and-enabled + Delete; Run Now/Repair hidden; edit modal shows "Script missing — select a replacement" placeholder; reconcile banner counts broken tasks and offers batch Remove Broken with confirm dialog)
 - [x] Show actionable error messages
 
 **Acceptance:** The scheduler continues working when the app is closed and can recover from configuration drift.
