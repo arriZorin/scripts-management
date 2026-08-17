@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useAppContext } from '../composables/useAppContext';
 import type { Script } from '../models/Script';
 import type { Task } from '../models/Task';
@@ -21,6 +21,8 @@ const {
   taskRunRepository,
   systemInfo: systemInfoService,
   runtimeRequirement,
+  runtimeCheckResult,
+  logger,
 } = useAppContext();
 
 const stats = ref<DashboardStats>({
@@ -36,8 +38,9 @@ const tasks = ref<Task[]>([]);
 const recentRuns = ref<TaskRun[]>([]);
 const systemInfo = ref<SystemInfo | null>(null);
 const loaded = ref(false);
-const runtimeResult = ref<RequirementCheckResult | null>(null);
-const runtimeChecking = ref(false);
+// Runtime result is read from the reactive context ref set once at startup
+// (App.vue).  No locator probe runs when this view mounts.
+const runtimeResult = computed(() => runtimeCheckResult.value);
 const runtimeResolving = ref(false);
 
 async function loadStats() {
@@ -56,29 +59,16 @@ async function loadStats() {
   loaded.value = true;
 }
 
-async function checkRuntime() {
-  runtimeChecking.value = true;
-  try {
-    runtimeResult.value = await runtimeRequirement.check();
-  } catch (error) {
-    runtimeResult.value = {
-      status: 'failed',
-      requirementName: 'Python runtime',
-      message: 'Runtime check failed.',
-      detail: error instanceof Error ? error.message : String(error),
-      resolvedPath: null,
-    };
-  } finally {
-    runtimeChecking.value = false;
-  }
-}
-
 async function resolveRuntime() {
   runtimeResolving.value = true;
   try {
-    runtimeResult.value = await runtimeRequirement.resolve();
+    const resolved = await runtimeRequirement.resolve();
+    runtimeCheckResult.value = resolved;
+    await logger?.record('runtime.resolve',
+      resolved.status === 'met' ? `Resolved: ${resolved.message} [${resolved.resolvedPath}]` : `Failed: ${resolved.message}`,
+      resolved.status === 'met' ? 'info' : 'error');
   } catch (error) {
-    runtimeResult.value = {
+    runtimeCheckResult.value = {
       status: 'failed',
       requirementName: 'Python runtime',
       message: 'Resolve failed.',
@@ -118,7 +108,6 @@ function runtimeStatusBadge(status: RequirementCheckResult['status']): string {
 
 onMounted(() => {
   loadStats();
-  checkRuntime();
 });
 </script>
 

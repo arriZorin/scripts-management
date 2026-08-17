@@ -16,8 +16,13 @@ function messageOf(error: unknown): string {
  *   Check:   host probe (Layer 1) -> uv python find (Layer 2)
  *   Resolve: uv (bootstrap + python install) -> direct install (official user-scope -> winget)
  *   Exhausted: deferred — try again now or on next launch.
+ *
+ * `check()` caches its result after the first probe so the host locator only
+ * runs once per session (App.vue triggers it at startup). `resolve()` always
+ * probes fresh and refreshes the cache on success.
  */
 export class PythonRuntimeCheck implements RuntimeRequirement {
+  private lastCheckResult: RequirementCheckResult | null = null
   private uvInstallDirPromise: Promise<string> | null = null
 
   constructor(
@@ -31,6 +36,14 @@ export class PythonRuntimeCheck implements RuntimeRequirement {
   ) {}
 
   async check(): Promise<RequirementCheckResult> {
+    if (this.lastCheckResult !== null) {
+      return this.lastCheckResult
+    }
+    this.lastCheckResult = await this.performCheck()
+    return this.lastCheckResult
+  }
+
+  private async performCheck(): Promise<RequirementCheckResult> {
     const existing = await this.locator.find()
     if (existing !== null) {
       return {
@@ -72,8 +85,11 @@ export class PythonRuntimeCheck implements RuntimeRequirement {
   async resolve(): Promise<RequirementCheckResult> {
     const attempts: string[] = []
     try {
-      const initial = await this.check()
+      // resolve() bypasses the check() cache: every probe here must be fresh
+      // because a previous layer may have just installed Python.
+      const initial = await this.performCheck()
       if (initial.status === 'met') {
+        this.lastCheckResult = initial
         return initial
       }
 
@@ -97,8 +113,9 @@ export class PythonRuntimeCheck implements RuntimeRequirement {
         if (install.exitCode !== 0) {
           attempts.push(`uv python install failed: ${(install.standardError ?? '').trim()}`)
         } else {
-          const recheck = await this.check()
+          const recheck = await this.performCheck()
           if (recheck.status === 'met') {
+            this.lastCheckResult = recheck
             return recheck
           }
           attempts.push('uv install reported success but python is still not found')
@@ -108,8 +125,9 @@ export class PythonRuntimeCheck implements RuntimeRequirement {
       // Layer 3: direct install (official user-scope -> winget).
       const directError = await this.directInstaller.tryInstall()
       if (directError === null) {
-        const recheck = await this.check()
+        const recheck = await this.performCheck()
         if (recheck.status === 'met') {
+          this.lastCheckResult = recheck
           return recheck
         }
         attempts.push('direct install succeeded but python is still not found')

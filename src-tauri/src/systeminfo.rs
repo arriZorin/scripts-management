@@ -7,9 +7,11 @@
 //!   latency in release builds, see `resolve_interpreter_path` in lib.rs)
 //! - `query_python_registry` — HKCU/HKLM `PythonCore` InstallPath keys
 //! - `download_to_file` / `extract_zip` — portable-zip bootstrap support
-//! - `default_uv_install_dir` — `%LOCALAPPDATA%\Programs\uv`
+//! - `default_uv_install_dir` — `%LOCALAPPDATA%\\Programs\\uv`
 
 use serde::Serialize;
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 use std::io::Read;
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -30,7 +32,14 @@ pub fn run_process_impl(
     args: &[String],
     timeout_ms: Option<u64>,
 ) -> Result<ProcessResult, String> {
-    let mut child = Command::new(file_name)
+    let mut cmd = Command::new(file_name);
+    #[cfg(windows)]
+    {
+        // CREATE_NO_WINDOW — prevents console windows from flashing when a GUI
+        // app (Tauri) spawns console processes (e.g. python --version probes).
+        cmd.creation_flags(0x08000000);
+    }
+    let mut child = cmd
         .args(args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

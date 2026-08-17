@@ -1,4 +1,4 @@
-import { createApp, nextTick } from 'vue'
+import { createApp, nextTick, ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import TaskView from './TaskView.vue'
 import { appContextKey, createAppContext } from '../composables/useAppContext'
@@ -8,6 +8,7 @@ import type { TaskRun } from '../models/TaskRun'
 import { TaskRunRecorder } from '../services/TaskRunRecorder'
 import type { TaskRunRepository } from '../services/TaskRunRepository'
 import type { ScriptPathChecker } from '../services/scriptPathChecker'
+import type { RequirementCheckResult } from '../services/runtimeCheck/types'
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
 import { invoke } from '@tauri-apps/api/core'
@@ -147,7 +148,7 @@ class FakeScriptRepository {
   async list() { return [...this.items] }
 }
 
-function mountView(repository: FakeTaskRepository, executor = new FakeTaskExecutor(), scheduler = new FakeTaskScheduler(), logger = new FakeLogger(), runRepository = new FakeTaskRunRepository(), scriptRepository: FakeScriptRepository | null = null, pathChecker: ScriptPathChecker = { exists: async () => true }, pythonPath: string | null = null) {
+function mountView(repository: FakeTaskRepository, executor = new FakeTaskExecutor(), scheduler = new FakeTaskScheduler(), logger = new FakeLogger(), runRepository = new FakeTaskRunRepository(), scriptRepository: FakeScriptRepository | null = null, pathChecker: ScriptPathChecker = { exists: async () => true }, runtimeCheck: RequirementCheckResult | null = null) {
   const container = document.createElement('div')
   document.body.appendChild(container)
   const app = createApp(TaskView)
@@ -160,7 +161,7 @@ function mountView(repository: FakeTaskRepository, executor = new FakeTaskExecut
     taskRunRecorder: new TaskRunRecorder(runRepository),
     scriptRepository: (scriptRepository ?? new FakeScriptRepository()) as never,
     scriptPathChecker: pathChecker,
-    pythonPath,
+    runtimeCheckResult: ref(runtimeCheck),
   }))
   app.mount(container)
   return { container, app, runRepository }
@@ -206,7 +207,11 @@ describe('TaskView', () => {
 
   it('pre-fills the interpreter from the system-info python path when creating a task', async () => {
     const repository = new FakeTaskRepository()
-    const { container, app } = mountView(repository, new FakeTaskExecutor(), new FakeTaskScheduler(), new FakeLogger(), new FakeTaskRunRepository(), null, { exists: async () => true }, 'C:\\Python312\\python.exe')
+    const metResult: RequirementCheckResult = {
+      status: 'met', requirementName: 'Python runtime', message: 'Python 3.12.4 found on host.',
+      detail: null, resolvedPath: 'C:\\Python312\\python.exe',
+    }
+    const { container, app } = mountView(repository, new FakeTaskExecutor(), new FakeTaskScheduler(), new FakeLogger(), new FakeTaskRunRepository(), null, { exists: async () => true }, metResult)
     await flush()
     ;(container.querySelector('[data-testid="new-task-btn"]') as HTMLElement).click()
     await flush()
@@ -229,7 +234,11 @@ describe('TaskView', () => {
   it('replaces a bare interpreter with the system-info path when editing a task', async () => {
     const repository = new FakeTaskRepository()
     await repository.create({ name: 'Edit me', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', startAt: '2026-08-14T08:00:00' }, enabled: true })
-    const { container, app } = mountView(repository, new FakeTaskExecutor(), new FakeTaskScheduler(), new FakeLogger(), new FakeTaskRunRepository(), null, { exists: async () => true }, 'C:\\Python312\\python.exe')
+    const metResult: RequirementCheckResult = {
+      status: 'met', requirementName: 'Python runtime', message: 'Python 3.12.4 found on host.',
+      detail: null, resolvedPath: 'C:\\Python312\\python.exe',
+    }
+    const { container, app } = mountView(repository, new FakeTaskExecutor(), new FakeTaskScheduler(), new FakeLogger(), new FakeTaskRunRepository(), null, { exists: async () => true }, metResult)
     await flush()
     ;(container.querySelector('[data-testid="edit-task-task-1"]') as HTMLElement).click()
     await flush()
@@ -241,7 +250,11 @@ describe('TaskView', () => {
   it('keeps an absolute interpreter when editing, even when a system-info path is available', async () => {
     const repository = new FakeTaskRepository()
     await repository.create({ name: 'Absolute path', scriptId: script.id, interpreter: 'C:\\Custom\\python.exe', arguments: [], schedule: { type: 'daily', startAt: '2026-08-14T08:00:00' }, enabled: true })
-    const { container, app } = mountView(repository, new FakeTaskExecutor(), new FakeTaskScheduler(), new FakeLogger(), new FakeTaskRunRepository(), null, { exists: async () => true }, 'C:\\Python312\\python.exe')
+    const metResult: RequirementCheckResult = {
+      status: 'met', requirementName: 'Python runtime', message: 'Python 3.12.4 found on host.',
+      detail: null, resolvedPath: 'C:\\Python312\\python.exe',
+    }
+    const { container, app } = mountView(repository, new FakeTaskExecutor(), new FakeTaskScheduler(), new FakeLogger(), new FakeTaskRunRepository(), null, { exists: async () => true }, metResult)
     await flush()
     ;(container.querySelector('[data-testid="edit-task-task-1"]') as HTMLElement).click()
     await flush()

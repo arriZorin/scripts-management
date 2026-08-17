@@ -83,6 +83,28 @@ describe('PythonRuntimeCheck — check', () => {
 
     expect(result.status).toBe('notMet')
   })
+
+  it('caches the result so a second call does not re-probe the locator', async () => {
+    const env = new FakeEnvironmentQuery()
+    env.pathMatches = ['C:\\venv\\Scripts\\python.exe']
+    const runner = new FakeProcessRunner((fileName, args) => {
+      if (args.includes('--version')) return ok('Python 3.11.15')
+      return err(`unexpected: ${fileName}`)
+    })
+    const check = createCheck(runner, new FakeFileDownloader(), env)
+
+    const first = await check.check()
+    expect(first.status).toBe('met')
+    expect(first.resolvedPath).toBe('C:\\venv\\Scripts\\python.exe')
+
+    // The locator was called once during the first check. The second call
+    // should return the cached result without any runner invocations.
+    const before = runner.invocations.length
+    const second = await check.check()
+    expect(second.status).toBe('met')
+    expect(second.resolvedPath).toBe('C:\\venv\\Scripts\\python.exe')
+    expect(runner.invocations.length).toBe(before)
+  })
 })
 
 describe('PythonRuntimeCheck — resolve', () => {

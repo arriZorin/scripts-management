@@ -1,4 +1,4 @@
-import { createApp, nextTick } from 'vue'
+import { createApp, nextTick, ref } from 'vue'
 import { describe, expect, it } from 'vitest'
 import HomeView from './HomeView.vue'
 import { appContextKey, createAppContext } from '../composables/useAppContext'
@@ -143,7 +143,7 @@ describe('HomeView runtime requirement card', () => {
   it('shows a Met badge and no Resolve button when the requirement is met', async () => {
     const { container, app } = await mountHome({
       ...emptyOverrides,
-      runtimeRequirement: fakeRuntimeRequirement(runtimeResult('met')),
+      runtimeCheckResult: ref(runtimeResult('met')),
     })
 
     const status = container.querySelector('[data-testid="runtime-status"]')
@@ -158,7 +158,7 @@ describe('HomeView runtime requirement card', () => {
   it('shows a Not met badge with a Resolve button when missing', async () => {
     const { container, app } = await mountHome({
       ...emptyOverrides,
-      runtimeRequirement: fakeRuntimeRequirement(runtimeResult('notMet')),
+      runtimeCheckResult: ref(runtimeResult('notMet')),
     })
 
     const status = container.querySelector('[data-testid="runtime-status"]')
@@ -173,6 +173,7 @@ describe('HomeView runtime requirement card', () => {
     const { container, app } = await mountHome({
       ...emptyOverrides,
       runtimeRequirement: fakeRuntimeRequirement(runtimeResult('notMet')),
+      runtimeCheckResult: ref(runtimeResult('notMet')),
     })
 
     const resolveButton = container.querySelector('[data-testid="resolve-runtime"]') as HTMLButtonElement
@@ -193,7 +194,7 @@ describe('HomeView runtime requirement card', () => {
   it('shows Try again for a deferred requirement', async () => {
     const { container, app } = await mountHome({
       ...emptyOverrides,
-      runtimeRequirement: fakeRuntimeRequirement(runtimeResult('deferred')),
+      runtimeCheckResult: ref(runtimeResult('deferred')),
     })
 
     const resolveButton = container.querySelector('[data-testid="resolve-runtime"]') as HTMLButtonElement

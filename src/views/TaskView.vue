@@ -13,7 +13,7 @@ import type { ReconcileResult } from '../services/TaskReconciler'
 import { findMissingScriptIds } from '../services/scriptReconciliation'
 import { errorMessage } from '../services/errorMessage'
 
-const { scriptRepository, taskRepository, taskExecutor, taskScheduler, logger, taskRunRepository, taskRunRecorder, scriptPathChecker, pythonPath } = useAppContext()
+const { scriptRepository, taskRepository, taskExecutor, taskScheduler, logger, taskRunRepository, taskRunRecorder, scriptPathChecker, runtimeCheckResult } = useAppContext()
 const scripts = ref<Script[]>([])
 const sortedScripts = computed(() => sortScripts(scripts.value))
 const selectableScripts = computed(() => sortedScripts.value.filter(script => !missingPathScriptIds.value.includes(script.id)))
@@ -236,8 +236,9 @@ function isAbsoluteWindowsPath(value: string): boolean {
  * PATH-first `python.exe` that differs from the detected runtime.
  */
 function prefillInterpreterFromSystemInfo() {
-  if (pythonPath) {
-    form.value.interpreter = pythonPath
+  const resolvedPath = runtimeCheckResult.value?.resolvedPath
+  if (resolvedPath) {
+    form.value.interpreter = resolvedPath
   }
 }
 

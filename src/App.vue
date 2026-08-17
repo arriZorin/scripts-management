@@ -60,15 +60,25 @@ const viewIcons: Record<string, Component> = {
 
 onMounted(async () => {
   appContext.logger.record('app', 'startup');
-  // Run the Python runtime check once at startup and cache the resolved path
-  // so that views (e.g. TaskView) can read it synchronously without re-probing.
+  // Run the Python runtime check ONCE at startup. The result is cached in the
+  // reactive runtimeCheckResult ref so views read it without re-probing.
   try {
     const result = await appContext.runtimeRequirement.check();
+    appContext.runtimeCheckResult.value = result;
     if (result.status === 'met' && result.resolvedPath) {
-      appContext.pythonPath = result.resolvedPath;
+      await appContext.logger.record('runtime.check', `Python resolved at startup: ${result.resolvedPath} [${result.message}]`, 'info');
+    } else {
+      await appContext.logger.record('runtime.check', `${result.message}`, 'info');
     }
-  } catch {
-    // check failed — pythonPath stays null, tasks fall back to default 'python'
+  } catch (error) {
+    appContext.runtimeCheckResult.value = {
+      status: 'failed',
+      requirementName: 'Python runtime',
+      message: 'Startup runtime check failed.',
+      detail: error instanceof Error ? error.message : String(error),
+      resolvedPath: null,
+    };
+    await appContext.logger.record('runtime.check', 'Startup runtime check threw an unexpected error.', 'error');
   }
 });
 </script>

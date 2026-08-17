@@ -1,4 +1,5 @@
-import { inject, provide, type InjectionKey } from 'vue'
+import { inject, isRef, provide, ref, type InjectionKey, type Ref } from 'vue'
+import type { RequirementCheckResult } from '../services/runtimeCheck/types'
 import type { ScriptRepository } from '../services/ScriptRepository'
 import { JsonScriptRepository } from '../services/JsonScriptRepository'
 import type { TaskRepository } from '../services/TaskRepository'
@@ -37,9 +38,9 @@ export interface AppContext {
   systemInfo: SystemInfoService
   scriptPathChecker: ScriptPathChecker
   runtimeRequirement: RuntimeRequirement
-  /** Python path resolved once at startup by the runtime check, or null if
-   *  no suitable Python was found. Tasks use this instead of re-probing. */
-  pythonPath: string | null
+  /** Result of the one-time startup runtime check. Reactive ref set by
+   *  App.vue — views read this instead of re-probing. */
+  runtimeCheckResult: Ref<RequirementCheckResult | null>
 }
 
 export const appContextKey: InjectionKey<AppContext> = Symbol('appContext')
@@ -66,7 +67,9 @@ export function createAppContext(overrides: Partial<AppContext> = {}): AppContex
     systemInfo: overrides.systemInfo ?? tauriSystemInfoService,
     scriptPathChecker: overrides.scriptPathChecker ?? tauriScriptPathChecker,
     runtimeRequirement: overrides.runtimeRequirement ?? createRuntimeRequirement(),
-    pythonPath: overrides.pythonPath ?? null,
+    runtimeCheckResult: isRef(overrides.runtimeCheckResult)
+      ? overrides.runtimeCheckResult
+      : ref(overrides.runtimeCheckResult ?? null),
   }
 }
 
