@@ -37,6 +37,9 @@ export interface AppContext {
   systemInfo: SystemInfoService
   scriptPathChecker: ScriptPathChecker
   runtimeRequirement: RuntimeRequirement
+  /** Python path resolved once at startup by the runtime check, or null if
+   *  no suitable Python was found. Tasks use this instead of re-probing. */
+  pythonPath: string | null
 }
 
 export const appContextKey: InjectionKey<AppContext> = Symbol('appContext')
@@ -63,6 +66,7 @@ export function createAppContext(overrides: Partial<AppContext> = {}): AppContex
     systemInfo: overrides.systemInfo ?? tauriSystemInfoService,
     scriptPathChecker: overrides.scriptPathChecker ?? tauriScriptPathChecker,
     runtimeRequirement: overrides.runtimeRequirement ?? createRuntimeRequirement(),
+    pythonPath: overrides.pythonPath ?? null,
   }
 }
 

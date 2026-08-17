@@ -58,8 +58,18 @@ const viewIcons: Record<string, Component> = {
   setting: SettingIcon,
 };
 
-onMounted(() => {
+onMounted(async () => {
   appContext.logger.record('app', 'startup');
+  // Run the Python runtime check once at startup and cache the resolved path
+  // so that views (e.g. TaskView) can read it synchronously without re-probing.
+  try {
+    const result = await appContext.runtimeRequirement.check();
+    if (result.status === 'met' && result.resolvedPath) {
+      appContext.pythonPath = result.resolvedPath;
+    }
+  } catch {
+    // check failed — pythonPath stays null, tasks fall back to default 'python'
+  }
 });
 </script>
 

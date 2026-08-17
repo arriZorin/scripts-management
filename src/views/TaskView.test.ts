@@ -8,7 +8,6 @@ import type { TaskRun } from '../models/TaskRun'
 import { TaskRunRecorder } from '../services/TaskRunRecorder'
 import type { TaskRunRepository } from '../services/TaskRunRepository'
 import type { ScriptPathChecker } from '../services/scriptPathChecker'
-import type { RequirementCheckResult, RuntimeRequirement } from '../services/runtimeCheck/types'
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
 import { invoke } from '@tauri-apps/api/core'
@@ -57,24 +56,6 @@ class FakeLogger {
 
   async record(source: string, message: string, level = 'info', durationMs: number | null = null) {
     this.records.push({ source, message, level, durationMs })
-  }
-}
-
-class FakeRuntimeRequirement implements RuntimeRequirement {
-  result: RequirementCheckResult = {
-    status: 'notMet',
-    requirementName: 'Python runtime',
-    message: 'No Python matching >=3.11 found.',
-    detail: null,
-    resolvedPath: null,
-  }
-
-  async check(): Promise<RequirementCheckResult> {
-    return this.result
-  }
-
-  async resolve(): Promise<RequirementCheckResult> {
-    return this.result
   }
 }
 
@@ -166,7 +147,7 @@ class FakeScriptRepository {
   async list() { return [...this.items] }
 }
 
-function mountView(repository: FakeTaskRepository, executor = new FakeTaskExecutor(), scheduler = new FakeTaskScheduler(), logger = new FakeLogger(), runRepository = new FakeTaskRunRepository(), scriptRepository: FakeScriptRepository | null = null, pathChecker: ScriptPathChecker = { exists: async () => true }, runtimeRequirement: RuntimeRequirement = new FakeRuntimeRequirement()) {
+function mountView(repository: FakeTaskRepository, executor = new FakeTaskExecutor(), scheduler = new FakeTaskScheduler(), logger = new FakeLogger(), runRepository = new FakeTaskRunRepository(), scriptRepository: FakeScriptRepository | null = null, pathChecker: ScriptPathChecker = { exists: async () => true }, pythonPath: string | null = null) {
   const container = document.createElement('div')
   document.body.appendChild(container)
   const app = createApp(TaskView)
@@ -179,7 +160,7 @@ function mountView(repository: FakeTaskRepository, executor = new FakeTaskExecut
     taskRunRecorder: new TaskRunRecorder(runRepository),
     scriptRepository: (scriptRepository ?? new FakeScriptRepository()) as never,
     scriptPathChecker: pathChecker,
-    runtimeRequirement,
+    pythonPath,
   }))
   app.mount(container)
   return { container, app, runRepository }
@@ -225,9 +206,7 @@ describe('TaskView', () => {
 
   it('pre-fills the interpreter from the system-info python path when creating a task', async () => {
     const repository = new FakeTaskRepository()
-    const runtime = new FakeRuntimeRequirement()
-    runtime.result = { status: 'met', requirementName: 'Python runtime', message: 'Python 3.12.4 found on host.', detail: null, resolvedPath: 'C:\\Python312\\python.exe' }
-    const { container, app } = mountView(repository, new FakeTaskExecutor(), new FakeTaskScheduler(), new FakeLogger(), new FakeTaskRunRepository(), null, { exists: async () => true }, runtime)
+    const { container, app } = mountView(repository, new FakeTaskExecutor(), new FakeTaskScheduler(), new FakeLogger(), new FakeTaskRunRepository(), null, { exists: async () => true }, 'C:\\Python312\\python.exe')
     await flush()
     ;(container.querySelector('[data-testid="new-task-btn"]') as HTMLElement).click()
     await flush()
@@ -236,11 +215,9 @@ describe('TaskView', () => {
     app.unmount()
   })
 
-  it('keeps the default python interpreter when the runtime check is not met', async () => {
+  it('keeps the default python interpreter when no python path is available', async () => {
     const repository = new FakeTaskRepository()
-    const runtime = new FakeRuntimeRequirement()
-    runtime.result = { status: 'notMet', requirementName: 'Python runtime', message: 'No Python found.', detail: null, resolvedPath: null }
-    const { container, app } = mountView(repository, new FakeTaskExecutor(), new FakeTaskScheduler(), new FakeLogger(), new FakeTaskRunRepository(), null, { exists: async () => true }, runtime)
+    const { container, app } = mountView(repository)
     await flush()
     ;(container.querySelector('[data-testid="new-task-btn"]') as HTMLElement).click()
     await flush()
@@ -252,9 +229,7 @@ describe('TaskView', () => {
   it('replaces a bare interpreter with the system-info path when editing a task', async () => {
     const repository = new FakeTaskRepository()
     await repository.create({ name: 'Edit me', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', startAt: '2026-08-14T08:00:00' }, enabled: true })
-    const runtime = new FakeRuntimeRequirement()
-    runtime.result = { status: 'met', requirementName: 'Python runtime', message: 'Python 3.12.4 found on host.', detail: null, resolvedPath: 'C:\\Python312\\python.exe' }
-    const { container, app } = mountView(repository, new FakeTaskExecutor(), new FakeTaskScheduler(), new FakeLogger(), new FakeTaskRunRepository(), null, { exists: async () => true }, runtime)
+    const { container, app } = mountView(repository, new FakeTaskExecutor(), new FakeTaskScheduler(), new FakeLogger(), new FakeTaskRunRepository(), null, { exists: async () => true }, 'C:\\Python312\\python.exe')
     await flush()
     ;(container.querySelector('[data-testid="edit-task-task-1"]') as HTMLElement).click()
     await flush()
@@ -263,12 +238,10 @@ describe('TaskView', () => {
     app.unmount()
   })
 
-  it('keeps an absolute interpreter when editing, even when the runtime check is met', async () => {
+  it('keeps an absolute interpreter when editing, even when a system-info path is available', async () => {
     const repository = new FakeTaskRepository()
     await repository.create({ name: 'Absolute path', scriptId: script.id, interpreter: 'C:\\Custom\\python.exe', arguments: [], schedule: { type: 'daily', startAt: '2026-08-14T08:00:00' }, enabled: true })
-    const runtime = new FakeRuntimeRequirement()
-    runtime.result = { status: 'met', requirementName: 'Python runtime', message: 'Python 3.12.4 found on host.', detail: null, resolvedPath: 'C:\\Python312\\python.exe' }
-    const { container, app } = mountView(repository, new FakeTaskExecutor(), new FakeTaskScheduler(), new FakeLogger(), new FakeTaskRunRepository(), null, { exists: async () => true }, runtime)
+    const { container, app } = mountView(repository, new FakeTaskExecutor(), new FakeTaskScheduler(), new FakeLogger(), new FakeTaskRunRepository(), null, { exists: async () => true }, 'C:\\Python312\\python.exe')
     await flush()
     ;(container.querySelector('[data-testid="edit-task-task-1"]') as HTMLElement).click()
     await flush()

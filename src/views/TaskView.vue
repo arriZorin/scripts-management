@@ -13,7 +13,7 @@ import type { ReconcileResult } from '../services/TaskReconciler'
 import { findMissingScriptIds } from '../services/scriptReconciliation'
 import { errorMessage } from '../services/errorMessage'
 
-const { scriptRepository, taskRepository, taskExecutor, taskScheduler, logger, taskRunRepository, taskRunRecorder, scriptPathChecker, runtimeRequirement } = useAppContext()
+const { scriptRepository, taskRepository, taskExecutor, taskScheduler, logger, taskRunRepository, taskRunRecorder, scriptPathChecker, pythonPath } = useAppContext()
 const scripts = ref<Script[]>([])
 const sortedScripts = computed(() => sortScripts(scripts.value))
 const selectableScripts = computed(() => sortedScripts.value.filter(script => !missingPathScriptIds.value.includes(script.id)))
@@ -202,7 +202,7 @@ async function openCreate() {
   form.value = emptyForm()
   error.value = ''
   isEditing.value = true
-  await prefillInterpreterFromSystemInfo()
+  prefillInterpreterFromSystemInfo()
 }
 
 async function openEdit(task: Task) {
@@ -222,7 +222,7 @@ async function openEdit(task: Task) {
   // which can be a different interpreter than the system-info Python. Replace
   // only non-absolute values so stored absolute paths are always respected.
   if (!isAbsoluteWindowsPath(task.interpreter)) {
-    await prefillInterpreterFromSystemInfo()
+    prefillInterpreterFromSystemInfo()
   }
 }
 
@@ -231,19 +231,13 @@ function isAbsoluteWindowsPath(value: string): boolean {
 }
 
 /**
- * Pre-fills the interpreter with the Python path the runtime check reports
+ * Pre-fills the interpreter with the Python path resolved once at startup
  * (the same one System Info shows) so tasks never silently fall back to a
  * PATH-first `python.exe` that differs from the detected runtime.
  */
-async function prefillInterpreterFromSystemInfo() {
-  if (!runtimeRequirement) return
-  try {
-    const result = await runtimeRequirement.check()
-    if (result.status === 'met' && result.resolvedPath) {
-      form.value.interpreter = result.resolvedPath
-    }
-  } catch {
-    // check failed — keep the default interpreter
+function prefillInterpreterFromSystemInfo() {
+  if (pythonPath) {
+    form.value.interpreter = pythonPath
   }
 }
 
