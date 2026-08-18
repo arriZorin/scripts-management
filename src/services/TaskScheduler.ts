@@ -19,7 +19,7 @@ export class TauriTaskScheduler implements TaskScheduler {
     const requirements = await invoke<string[]>('read_folder_requirements', { dirPath: workingDir })
 
     // Ensure venv exists and deps are synced (idempotent — hash cache skips if unchanged)
-    const pythonVersion = '3.11' // default until Script model has pythonVersion field
+    const pythonVersion = script.pythonVersion ?? '3.11'
     await invoke('ensure_script_venv', { folderHash, pythonVersion })
     if (requirements.length > 0) {
       await invoke('sync_script_deps', { folderHash, requirements })

@@ -16,7 +16,12 @@ export class JsonScriptRepository implements ScriptRepository {
     const content = await this.fileStorage.read(this.scriptsFilePath)
     if (content === null) return []
     const scripts: Script[] = JSON.parse(content)
-    return Array.isArray(scripts) ? scripts : []
+    if (!Array.isArray(scripts)) return []
+    // Backward compat: fill defaults for fields added after initial schema
+    for (const s of scripts) {
+      s.pythonVersion ??= '3.11'
+    }
+    return scripts as Script[]
   }
 
   private async writeScripts(scripts: Script[]): Promise<void> {

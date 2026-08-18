@@ -4,6 +4,7 @@ export interface Script {
   path: string
   type: 'python'
   description?: string
+  pythonVersion?: string      // default "3.11" applied by repository
   createdAt: string
   updatedAt: string
 }
