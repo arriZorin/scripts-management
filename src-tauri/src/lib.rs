@@ -6,6 +6,7 @@ use tauri::Manager;
 
 mod scheduler;
 mod systeminfo;
+mod venv;
 #[cfg(windows)]
 mod windows_scheduler;
 
@@ -360,6 +361,67 @@ fn get_task_run_result(
     }
 }
 
+#[tauri::command]
+fn compute_folder_hash(dir_path: String) -> Result<String, String> {
+    if dir_path.is_empty() {
+        return Err("path cannot be empty".to_string());
+    }
+    Ok(venv::folder_hash(&dir_path))
+}
+
+#[tauri::command]
+fn get_venv_python_path(
+    state: tauri::State<'_, AppDataDir>,
+    folder_hash: String,
+) -> Result<String, String> {
+    if folder_hash.len() != 16 {
+        return Err("invalid folder hash".to_string());
+    }
+    Ok(venv::venv_python_path(&state.0, &folder_hash)
+        .to_string_lossy()
+        .to_string())
+}
+
+#[tauri::command]
+fn ensure_script_venv(
+    state: tauri::State<'_, AppDataDir>,
+    folder_hash: String,
+    python_version: String,
+) -> Result<String, String> {
+    if folder_hash.len() != 16 {
+        return Err("invalid folder hash".to_string());
+    }
+    if python_version.is_empty() {
+        return Err("python_version cannot be empty".to_string());
+    }
+    // Call into the module; pass None for uv_path so it uses PATH-discovered uv.exe.
+    // The caller (venv bootstrap) ensures uv is available before this runs.
+    venv::ensure_venv(&state.0, &folder_hash, &python_version, None)
+}
+
+#[tauri::command]
+fn sync_script_deps(
+    state: tauri::State<'_, AppDataDir>,
+    folder_hash: String,
+    requirements: Vec<String>,
+) -> Result<(), String> {
+    if folder_hash.len() != 16 {
+        return Err("invalid folder hash".to_string());
+    }
+    venv::sync_deps(&state.0, &folder_hash, &requirements, None)
+}
+
+#[tauri::command]
+fn delete_script_venv(
+    state: tauri::State<'_, AppDataDir>,
+    folder_hash: String,
+) -> Result<(), String> {
+    if folder_hash.len() != 16 {
+        return Err("invalid folder hash".to_string());
+    }
+    venv::delete_venv(&state.0, &folder_hash)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -382,6 +444,11 @@ pub fn run() {
             resolve_interpreter_path,
             get_log_directory,
             get_app_mode,
+            compute_folder_hash,
+            get_venv_python_path,
+            ensure_script_venv,
+            sync_script_deps,
+            delete_script_venv,
             systeminfo::run_process,
             systeminfo::find_all_in_path_command,
             systeminfo::query_python_registry,
