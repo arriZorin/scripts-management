@@ -1351,7 +1351,9 @@ mod tests {
             .split(';')
             .map(str::to_string)
             .collect();
-        let python = crate::find_in_path("python", &entries)
+        let python = crate::systeminfo::find_all_in_path("python", &entries)
+            .into_iter()
+            .next()
             .expect("python must be on PATH for this integration test");
         let script = log_dir.join("probe.py");
         std::fs::write(&script, "print('battery-probe-marker')\n").unwrap();

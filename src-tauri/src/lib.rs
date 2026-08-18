@@ -42,45 +42,6 @@ fn log_dir(root: &Path) -> Result<PathBuf, String> {
     Ok(dir)
 }
 
-/// Searches PATH-style entries for `<name>.exe` without spawning any process.
-/// Spawning console tools (e.g. `where.exe`) from the Tauri GUI process incurs
-/// seconds of console-host latency in release builds, so resolution is done
-/// with plain filesystem checks instead.
-fn find_in_path(interpreter: &str, entries: &[String]) -> Option<String> {
-    let name = if interpreter.to_lowercase().ends_with(".exe") {
-        interpreter.to_string()
-    } else {
-        format!("{}.exe", interpreter)
-    };
-    for entry in entries {
-        if entry.is_empty() {
-            continue;
-        }
-        let candidate = Path::new(entry).join(&name);
-        if candidate.is_file() {
-            return Some(candidate.to_string_lossy().to_string());
-        }
-    }
-    None
-}
-
-#[tauri::command]
-fn resolve_interpreter_path(interpreter: String) -> Result<String, String> {
-    if interpreter.is_empty() {
-        return Err("interpreter cannot be empty".to_string());
-    }
-    if is_absolute_windows_path(&interpreter) {
-        return Ok(interpreter);
-    }
-    let entries: Vec<String> = std::env::var("PATH")
-        .unwrap_or_default()
-        .split(';')
-        .map(str::to_string)
-        .collect();
-    find_in_path(&interpreter, &entries)
-        .ok_or_else(|| format!("interpreter not found: {}", interpreter))
-}
-
 #[tauri::command]
 fn get_log_directory(state: tauri::State<'_, AppDataDir>) -> Result<String, String> {
     log_dir(&state.0).map(|path| path.to_string_lossy().to_string())
@@ -480,7 +441,6 @@ pub fn run() {
             get_scheduled_task_status,
             list_scheduled_tasks,
             get_task_run_result,
-            resolve_interpreter_path,
             get_log_directory,
             get_app_mode,
             compute_folder_hash,
@@ -625,50 +585,6 @@ mod tests {
         assert!(!crate::is_absolute_windows_path("python"));
         assert!(!crate::is_absolute_windows_path(""));
         assert!(!crate::is_absolute_windows_path("scripts/run.py"));
-    }
-
-    #[test]
-    fn test_resolve_interpreter_path_passthrough_for_absolute() {
-        assert_eq!(
-            crate::resolve_interpreter_path("C:\\Python312\\python.exe".to_string()).unwrap(),
-            "C:\\Python312\\python.exe"
-        );
-        assert_eq!(
-            crate::resolve_interpreter_path("D:/tools/python.exe".to_string()).unwrap(),
-            "D:/tools/python.exe"
-        );
-    }
-
-    #[test]
-    fn test_resolve_interpreter_path_empty_errs() {
-        assert_eq!(
-            crate::resolve_interpreter_path("".to_string()).unwrap_err(),
-            "interpreter cannot be empty"
-        );
-    }
-
-    #[test]
-    fn test_find_in_path_locates_exe_without_spawning() {
-        let dir = create_temp_dir("find-in-path");
-        let fake = dir.join("python.exe");
-        fs::write(&fake, "").unwrap();
-        let result = crate::find_in_path("python", &[dir.to_string_lossy().to_string()]);
-        assert_eq!(result, Some(fake.to_string_lossy().to_string()));
-        assert_eq!(
-            crate::find_in_path("missing", &[dir.to_string_lossy().to_string()]),
-            None
-        );
-        let _ = fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn test_find_in_path_handles_extension_already_present() {
-        let dir = create_temp_dir("find-in-path-ext");
-        let fake = dir.join("python3.exe");
-        fs::write(&fake, "").unwrap();
-        let result = crate::find_in_path("python3.exe", &[dir.to_string_lossy().to_string()]);
-        assert_eq!(result, Some(fake.to_string_lossy().to_string()));
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
