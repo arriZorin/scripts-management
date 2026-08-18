@@ -157,7 +157,7 @@ const RelativeTime = defineComponent({
   },
 });
 
-const { scriptRepository: repository, picker, scanner, taskRepository, taskScheduler, scriptPathChecker } = useAppContext();
+const { scriptRepository: repository, picker, scanner, taskRepository, taskScheduler, scriptPathChecker, venvSync } = useAppContext();
 
 const { scripts, error, busy, addScriptFile, addScriptFolder, load } = useScripts({ repository, picker, scanner });
 const sortedScripts = computed(() => sortScripts(scripts.value));
@@ -223,6 +223,8 @@ async function saveEdit() {
       description: editDescription.value.trim(),
       pythonVersion: editPythonVersion.value,
     });
+    // Sync venv for the folder (pythonVersion or requirements.txt may have changed)
+    await venvSync.syncFolder(selectedScript.value.path, editPythonVersion.value);
     await loadAndReconcile();
     closeEditDialog();
     operationSummary.value = `Updated ${trimmedName}.`;
@@ -263,7 +265,10 @@ async function confirmDelete() {
       await taskRepository.delete(task.id);
       await taskScheduler.delete(task.id);
     }
+    const deletePath = target.path;
     await repository.delete(target.id);
+    // Cleanup venv — if no more scripts in this folder, venv is removed
+    await venvSync.cleanupFolder(deletePath);
     await loadAndReconcile();
 
     operationSummary.value = linkedTasks.value.length > 0
@@ -280,11 +285,22 @@ async function confirmDelete() {
 
 async function handleAddFile() {
   const result = await addScriptFile();
+  if (result.added > 0) {
+    // Sync venv for each newly added script's folder
+    for (const s of scripts.value) {
+      try { await venvSync.syncFolder(s.path, s.pythonVersion ?? '3.11') } catch { /* skip sync errors on add */ }
+    }
+  }
   operationSummary.value = `Added ${result.added} script(s), skipped ${result.skipped}.`;
 }
 
 async function handleAddFolder() {
   const result = await addScriptFolder();
+  if (result.added > 0) {
+    for (const s of scripts.value) {
+      try { await venvSync.syncFolder(s.path, s.pythonVersion ?? '3.11') } catch { /* skip sync errors on add */ }
+    }
+  }
   operationSummary.value = `Added ${result.added} script(s), skipped ${result.skipped}.`;
 }
 
@@ -308,6 +324,8 @@ async function handleRepair(script: Script) {
 
   try {
     const updatedScript = await repository.update(script.id, { path: selectedPath });
+    // Sync venv for the new path's folder (requirements.txt might differ)
+    await venvSync.syncFolder(selectedPath, updatedScript.pythonVersion ?? '3.11');
     const linkedTasks = (await taskRepository.list()).filter((task) => task.scriptId === script.id);
     for (const task of linkedTasks) {
       await taskScheduler.update(task, updatedScript);

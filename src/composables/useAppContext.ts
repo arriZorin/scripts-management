@@ -19,6 +19,7 @@ import { TauriFileScanner } from '../services/scriptImport/FileScanner'
 import { AppLogger } from '../services/AppLogger'
 import { TaskRunRecorder } from '../services/TaskRunRecorder'
 import { TauriFileStorage } from '../services/TauriFileStorage'
+import { TauriVenvSync, type VenvSync } from '../services/venvSync'
 import { tauriSystemInfoService, type SystemInfoService } from '../services/systemInfo'
 import { tauriScriptPathChecker, type ScriptPathChecker } from '../services/scriptPathChecker'
 import { createRuntimeRequirement } from '../services/runtimeCheck/createRuntimeRequirement'
@@ -38,6 +39,7 @@ export interface AppContext {
   systemInfo: SystemInfoService
   scriptPathChecker: ScriptPathChecker
   runtimeRequirement: RuntimeRequirement
+  venvSync: VenvSync
   /** Result of the one-time startup runtime check. Reactive ref set by
    *  App.vue — views read this instead of re-probing. */
   runtimeCheckResult: Ref<RequirementCheckResult | null>
@@ -67,6 +69,7 @@ export function createAppContext(overrides: Partial<AppContext> = {}): AppContex
     systemInfo: overrides.systemInfo ?? tauriSystemInfoService,
     scriptPathChecker: overrides.scriptPathChecker ?? tauriScriptPathChecker,
     runtimeRequirement: overrides.runtimeRequirement ?? createRuntimeRequirement(),
+    venvSync: overrides.venvSync ?? new TauriVenvSync(scriptRepository),
     runtimeCheckResult: isRef(overrides.runtimeCheckResult)
       ? overrides.runtimeCheckResult
       : ref(overrides.runtimeCheckResult ?? null),

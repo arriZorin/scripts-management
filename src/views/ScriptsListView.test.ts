@@ -80,8 +80,8 @@ class FakeTaskRepository {
 }
 
 class FakeTaskScheduler {
-  public deletes: string[] = []
   public updates: Array<{ taskId: string; scriptPath: string }> = []
+  public deletes: string[] = []
   public error: unknown = null
 
   update(task: any, script: any): Promise<void> {
@@ -97,6 +97,11 @@ class FakeTaskScheduler {
   }
 }
 
+class FakeVenvSync {
+  async syncFolder(_path: string, _version: string) { return Promise.resolve() }
+  async cleanupFolder(_path: string) { return Promise.resolve() }
+}
+
 function mountView(repo: FakeScriptRepository, picker: FakeScriptPicker, scanner: FakeFileScanner, taskRepository = new FakeTaskRepository(), taskScheduler = new FakeTaskScheduler(), scriptPathChecker: { exists: (path: string) => Promise<boolean> } = { exists: async () => true }) {
   const container = document.createElement('div')
   document.body.appendChild(container)
@@ -108,6 +113,7 @@ function mountView(repo: FakeScriptRepository, picker: FakeScriptPicker, scanner
     taskRepository: taskRepository as never,
     taskScheduler: taskScheduler as never,
     scriptPathChecker,
+    venvSync: new FakeVenvSync() as never,
   }))
   app.mount(container)
   return { container, app, taskRepository, taskScheduler }
@@ -481,6 +487,7 @@ describe('ScriptsListView', () => {
       picker: new FakeScriptPicker() as never,
       scanner: new FakeFileScanner() as never,
       scriptPathChecker: { exists: async () => available },
+      venvSync: new FakeVenvSync() as never,
     }))
     app.mount(container)
     await flush()
