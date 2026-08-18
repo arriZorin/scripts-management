@@ -41,7 +41,7 @@ fn wide(value: &str) -> Vec<u16> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CreateTaskSpec {
     pub task_name: String,
-    pub interpreter: String,
+    pub venv_python_path: String,
     pub script_path: String,
     pub arguments: Vec<String>,
     pub working_directory: String,
@@ -96,13 +96,13 @@ fn validate_absolute_path(value: &str, label: &str) -> Result<(), String> {
 /// individually quoted. Because `validate_text` rejects shell metacharacters
 /// in all inputs, the embedded values cannot break out of the wrapper.
 pub fn exec_action_parts(
-    interpreter: &str,
+    venv_python_path: &str,
     script_path: &str,
     arguments: &[String],
     log_directory: &str,
     task_name: &str,
 ) -> Result<(String, String), String> {
-    validate_absolute_path(interpreter, "interpreter")?;
+    validate_absolute_path(venv_python_path, "venv_python_path")?;
     validate_absolute_path(script_path, "script_path")?;
     validate_absolute_path(log_directory, "log_directory")?;
     for argument in arguments {
@@ -112,7 +112,7 @@ pub fn exec_action_parts(
     let stdout_log = format!("{}\\{}.out.log", log_directory, stem);
     let stderr_log = format!("{}\\{}.err.log", log_directory, stem);
 
-    let mut command = format!("\"{}\" \"{}\"", interpreter, script_path);
+    let mut command = format!("\"{}\" \"{}\"", venv_python_path, script_path);
     for argument in arguments {
         command.push_str(&format!(" \"{}\"", argument));
     }
@@ -611,7 +611,7 @@ unsafe fn set_trigger_specifics(trigger: *mut ITrigger, plan: &TriggerPlan) -> R
 /// Creates (or updates) a scheduled task using the native Task Scheduler API.
 pub fn create_task(spec: &CreateTaskSpec) -> Result<String, String> {
     validate_text(&spec.task_name, "task_name")?;
-    validate_text(&spec.interpreter, "interpreter")?;
+    validate_text(&spec.venv_python_path, "venv_python_path")?;
     validate_text(&spec.script_path, "script_path")?;
     validate_text(&spec.working_directory, "working_directory")?;
     for argument in &spec.arguments {
@@ -620,7 +620,7 @@ pub fn create_task(spec: &CreateTaskSpec) -> Result<String, String> {
     // Build the cmd.exe action up front (pure): stdout/stderr are redirected
     // into per-task log files inside the log directory.
     let (action_path, action_arguments) = exec_action_parts(
-        &spec.interpreter,
+        &spec.venv_python_path,
         &spec.script_path,
         &spec.arguments,
         &spec.log_directory,
@@ -1241,7 +1241,7 @@ mod tests {
     fn create_task_spec_validates_arguments() {
         let spec = CreateTaskSpec {
             task_name: "ScriptsManagement\\task-1".to_string(),
-            interpreter: "C:\\Python312\\python.exe".to_string(),
+            venv_python_path: "C:\\Python312\\python.exe".to_string(),
             script_path: "C:\\Scripts\\backup.py".to_string(),
             arguments: vec!["--output".to_string(), "C:\\Backup Folder".to_string()],
             working_directory: "C:\\Scripts".to_string(),
@@ -1252,7 +1252,7 @@ mod tests {
         };
         // Validate without touching COM: each field individually.
         validate_text(&spec.task_name, "task_name").unwrap();
-        validate_text(&spec.interpreter, "interpreter").unwrap();
+        validate_text(&spec.venv_python_path, "venv_python_path").unwrap();
         validate_text(&spec.script_path, "script_path").unwrap();
         validate_text(&spec.working_directory, "working_directory").unwrap();
         for argument in &spec.arguments {
@@ -1309,7 +1309,7 @@ mod tests {
         // A minimal Once task registered through the production COM path.
         let spec = CreateTaskSpec {
             task_name: task_name.to_string(),
-            interpreter: "C:\\Windows\\System32\\cmd.exe".to_string(),
+            venv_python_path: "C:\\Windows\\System32\\cmd.exe".to_string(),
             script_path: "C:\\Windows\\System32\\cmd.exe".to_string(),
             arguments: vec![],
             working_directory: "C:\\Windows\\System32".to_string(),
@@ -1358,7 +1358,7 @@ mod tests {
 
         let spec = CreateTaskSpec {
             task_name: task_name.to_string(),
-            interpreter: python,
+            venv_python_path: python,
             script_path: script.to_string_lossy().to_string(),
             arguments: vec![],
             working_directory: log_dir.to_string_lossy().to_string(),

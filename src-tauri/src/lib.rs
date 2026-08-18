@@ -229,7 +229,7 @@ fn schedule_from_payload(payload: SchedulePayload) -> Result<scheduler::Schedule
 #[tauri::command]
 fn create_scheduled_task(
     task_name: String,
-    interpreter: String,
+    venv_python_path: String,
     script_path: String,
     arguments: Vec<String>,
     working_directory: String,
@@ -241,7 +241,7 @@ fn create_scheduled_task(
     {
         return windows_scheduler::create_task(&windows_scheduler::CreateTaskSpec {
             task_name,
-            interpreter,
+            venv_python_path,
             script_path,
             arguments,
             working_directory,
@@ -253,7 +253,7 @@ fn create_scheduled_task(
     scheduler::execute_command(scheduler::build_create_command(
         scheduler::CreateScheduledTask {
             task_name,
-            interpreter,
+            venv_python_path,
             script_path,
             arguments,
             working_directory,
@@ -266,7 +266,7 @@ fn create_scheduled_task(
 #[tauri::command]
 fn update_scheduled_task(
     task_name: String,
-    interpreter: String,
+    venv_python_path: String,
     script_path: String,
     arguments: Vec<String>,
     working_directory: String,
@@ -280,7 +280,7 @@ fn update_scheduled_task(
         // upsert of the same definition used by create.
         return windows_scheduler::create_task(&windows_scheduler::CreateTaskSpec {
             task_name,
-            interpreter,
+            venv_python_path,
             script_path,
             arguments,
             working_directory,
@@ -422,6 +422,17 @@ fn delete_script_venv(
     venv::delete_venv(&state.0, &folder_hash)
 }
 
+#[tauri::command]
+fn read_folder_requirements(dir_path: String) -> Result<Vec<String>, String> {
+    if dir_path.is_empty() {
+        return Err("dir_path cannot be empty".to_string());
+    }
+    if !std::path::Path::new(&dir_path).is_dir() {
+        return Err(format!("directory not found: {}", dir_path));
+    }
+    venv::read_requirements_txt(&dir_path)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -449,6 +460,7 @@ pub fn run() {
             ensure_script_venv,
             sync_script_deps,
             delete_script_venv,
+            read_folder_requirements,
             systeminfo::run_process,
             systeminfo::find_all_in_path_command,
             systeminfo::query_python_registry,

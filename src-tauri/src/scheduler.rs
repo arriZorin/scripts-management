@@ -44,7 +44,7 @@ pub enum ScheduleSpec {
 #[cfg(not(windows))]
 pub struct CreateScheduledTask {
     pub task_name: String,
-    pub interpreter: String,
+    pub venv_python_path: String,
     pub script_path: String,
     pub arguments: Vec<String>,
     pub working_directory: String,
@@ -200,7 +200,7 @@ fn spec(args: Vec<String>) -> CommandSpec {
 #[cfg(not(windows))]
 pub fn build_create_command(input: CreateScheduledTask) -> Result<CommandSpec, String> {
     validate_text(&input.task_name, "task_name")?;
-    validate_absolute_path(&input.interpreter, "interpreter")?;
+    validate_absolute_path(&input.venv_python_path, "venv_python_path")?;
     validate_absolute_path(&input.script_path, "script_path")?;
     validate_absolute_path(&input.working_directory, "working_directory")?;
     validate_absolute_path(&input.log_directory, "log_directory")?;
@@ -213,7 +213,7 @@ pub fn build_create_command(input: CreateScheduledTask) -> Result<CommandSpec, S
         input.task_name,
         "/TR".to_string(),
     ];
-    let mut command = format!("\"{}\" \"{}\"", input.interpreter, input.script_path);
+    let mut command = format!("\"{}\" \"{}\"", input.venv_python_path, input.script_path);
     for argument in input.arguments {
         command.push_str(&format!(" \"{}\"", argument));
     }
@@ -293,7 +293,7 @@ mod tests {
     fn builds_create_command_with_absolute_paths_and_separate_arguments() {
         let command = build_create_command(CreateScheduledTask {
             task_name: "ScriptsManagement\\task-1".to_string(),
-            interpreter: "C:\\Python312\\python.exe".to_string(),
+            venv_python_path: "C:\\Python312\\python.exe".to_string(),
             script_path: "C:\\Scripts\\backup.py".to_string(),
             arguments: vec!["--output".to_string(), "C:\\Backup Folder".to_string()],
             working_directory: "C:\\Scripts".to_string(),
@@ -321,7 +321,7 @@ mod tests {
     fn rejects_relative_paths() {
         let result = build_create_command(CreateScheduledTask {
             task_name: "ScriptsManagement\\task-1".to_string(),
-            interpreter: "python".to_string(),
+            venv_python_path: "python".to_string(),
             script_path: "scripts\\backup.py".to_string(),
             arguments: vec![],
             working_directory: "C:\\Scripts".to_string(),
@@ -355,7 +355,7 @@ mod tests {
     fn create_command_runs_as_current_user() {
         let command = build_create_command(CreateScheduledTask {
             task_name: "ScriptsManagement\\task-1".to_string(),
-            interpreter: "C:\\Python312\\python.exe".to_string(),
+            venv_python_path: "C:\\Python312\\python.exe".to_string(),
             script_path: "C:\\Scripts\\backup.py".to_string(),
             arguments: vec![],
             working_directory: "C:\\Scripts".to_string(),

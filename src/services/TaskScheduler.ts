@@ -12,20 +12,36 @@ export interface TaskScheduler {
 
 export class TauriTaskScheduler implements TaskScheduler {
   async create(task: Task, script: Script): Promise<void> {
-    const interpreter = await resolveInterpreter(task.interpreter)
+    const workingDir = scriptDir(script.path)
+    const folderHash = await invoke<string>('compute_folder_hash', { dirPath: workingDir })
+
+    // Read requirements.txt from script folder (or empty if not found)
+    const requirements = await invoke<string[]>('read_folder_requirements', { dirPath: workingDir })
+
+    // Ensure venv exists and deps are synced (idempotent — hash cache skips if unchanged)
+    const pythonVersion = '3.11' // default until Script model has pythonVersion field
+    await invoke('ensure_script_venv', { folderHash, pythonVersion })
+    if (requirements.length > 0) {
+      await invoke('sync_script_deps', { folderHash, requirements })
+    }
+
+    // Get the venv's python.exe path
+    const venvPythonPath = await invoke<string>('get_venv_python_path', { folderHash })
+
     const logDirectory = await invoke<string>('get_log_directory')
     await invoke('create_scheduled_task', {
       taskName: taskWindowsName(task.id),
-      interpreter,
+      venvPythonPath,
       scriptPath: script.path,
       arguments: task.arguments,
-      workingDirectory: scriptDir(script.path),
+      workingDirectory: workingDir,
       logDirectory,
       schedule: schedulePayload(task.schedule),
     })
   }
 
   async update(task: Task, script: Script): Promise<void> {
+    // Delete first, then recreate with fresh venv sync
     await this.delete(task.id)
     await this.create(task, script)
   }
@@ -41,15 +57,6 @@ export class TauriTaskScheduler implements TaskScheduler {
   async setEnabled(taskId: string, enabled: boolean): Promise<void> {
     await invoke('set_scheduled_task_enabled', { taskName: taskWindowsName(taskId), enabled })
   }
-}
-
-function isAbsoluteWindowsPath(value: string): boolean {
-  return /^[A-Za-z]:[\\/]/.test(value)
-}
-
-async function resolveInterpreter(interpreter: string): Promise<string> {
-  if (isAbsoluteWindowsPath(interpreter)) return interpreter
-  return invoke<string>('resolve_interpreter_path', { interpreter })
 }
 
 function scriptDir(path: string): string {

@@ -339,7 +339,22 @@ pub fn delete_venv(app_data: &Path, folder_hash: &str) -> Result<(), String> {
 
 // ── Read utilities ───────────────────────────────────────
 
-/// Reads the cached hash from deps/<hash>.sha256.
+/// Reads the contents of requirements.txt from a script directory.
+/// Returns empty vec if the file doesn't exist.
+pub fn read_requirements_txt(dir_path: &str) -> Result<Vec<String>, String> {
+    let req_path = Path::new(dir_path).join("requirements.txt");
+    if !req_path.is_file() {
+        return Ok(Vec::new());
+    }
+    let content =
+        fs::read_to_string(&req_path).map_err(|e| format!("failed to read requirements.txt: {}", e))?;
+    let lines: Vec<String> = content
+        .lines()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .collect();
+    Ok(lines)
+}
 pub fn read_deps_hash(app_data: &Path, folder_hash: &str) -> Result<String, String> {
     let path = deps_hash_file_path(app_data, folder_hash);
     let content = fs::read_to_string(&path)
@@ -699,6 +714,36 @@ mod tests {
         let dir = temp_dir("delete_noop");
         let result = delete_venv(&dir, "nonexistent");
         assert!(result.is_ok(), "deleting non-existent venv should be ok");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // ── Read requirements.txt tests ─────────────────────────
+
+    #[test]
+    fn read_requirements_txt_returns_empty_when_no_file() {
+        let dir = temp_dir("req_missing");
+        let result = read_requirements_txt(&dir.to_string_lossy()).unwrap();
+        assert!(result.is_empty());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn read_requirements_txt_parses_lines() {
+        let dir = temp_dir("req_parse");
+        let req_path = dir.join("requirements.txt");
+        fs::write(&req_path, "pandas>=2.0\nrequests\n# comment\nnumpy\n\n").unwrap();
+        let result = read_requirements_txt(&dir.to_string_lossy()).unwrap();
+        assert_eq!(result, vec!["pandas>=2.0", "requests", "numpy"]);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn read_requirements_txt_skips_comments_and_empty_lines() {
+        let dir = temp_dir("req_skip");
+        let req_path = dir.join("requirements.txt");
+        fs::write(&req_path, "# this is a comment\n\n  \npandas\n").unwrap();
+        let result = read_requirements_txt(&dir.to_string_lossy()).unwrap();
+        assert_eq!(result, vec!["pandas"]);
         let _ = fs::remove_dir_all(&dir);
     }
 
