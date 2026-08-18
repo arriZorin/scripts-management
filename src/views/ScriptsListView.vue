@@ -65,6 +65,16 @@
               <textarea v-model="editDescription" data-testid="edit-description-input" class="textarea textarea-bordered h-20" placeholder="Script description" />
             </label>
           </div>
+          <div class="form-control w-full mb-4">
+            <label class="label">
+              <span class="label-text">Python Version</span>
+              <select v-model="editPythonVersion" data-testid="edit-python-version" class="select select-bordered w-full">
+                <option value="3.11">3.11 (default)</option>
+                <option value="3.12">3.12</option>
+                <option value="3.13">3.13</option>
+              </select>
+            </label>
+          </div>
           <div v-if="editError" class="alert alert-error mb-4" role="alert"><AlertIcon kind="error" /><span>{{ editError }}</span></div>
           <div class="flex justify-between items-center">
             <div class="text-sm text-gray-600">
@@ -169,6 +179,7 @@ const summary = computed(() => operationSummary.value);
 const selectedScript = ref<Script | null>(null);
 const editName = ref('');
 const editDescription = ref('');
+const editPythonVersion = ref('3.11');
 const isEditing = ref(false);
 const editError = ref<string | null>(null);
 
@@ -182,6 +193,7 @@ function openEditDialog(script: Script) {
   selectedScript.value = script;
   editName.value = script.name;
   editDescription.value = script.description ?? '';
+  editPythonVersion.value = script.pythonVersion ?? '3.11';
   editError.value = null;
   operationSummary.value = '';
   isEditing.value = true;
@@ -209,6 +221,7 @@ async function saveEdit() {
     await repository.update(selectedScript.value.id, {
       name: trimmedName,
       description: editDescription.value.trim(),
+      pythonVersion: editPythonVersion.value,
     });
     await loadAndReconcile();
     closeEditDialog();
