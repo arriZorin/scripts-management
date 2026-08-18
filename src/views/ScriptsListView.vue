@@ -122,6 +122,33 @@
           <button @click.prevent="cancelDelete">close</button>
         </form>
       </dialog>
+
+      <!-- Deps scan modal -->
+      <dialog id="deps-dialog" v-if="pendingDeps" data-testid="deps-dialog" class="modal modal-open" role="dialog">
+        <div class="modal-box p-4 max-w-md">
+          <h3 class="text-lg font-bold mb-2">Dependencies Detected</h3>
+          <p class="text-sm text-gray-600 mb-4">
+            No <code>requirements.txt</code> found in this folder. The following
+            third-party packages were detected:
+          </p>
+          <div class="mb-4 space-y-1">
+            <div v-for="dep in pendingDeps.detected" :key="dep" class="flex items-center gap-2 p-2 bg-gray-50 rounded dark:bg-[#3a3a3a]">
+              <code class="text-sm">{{ dep }}</code>
+            </div>
+          </div>
+          <p class="text-sm text-gray-500 mb-4">
+            Create a <code>requirements.txt</code> file? Dependencies will be
+            installed in the folder's virtual environment.
+          </p>
+          <div class="flex gap-2 justify-end">
+            <button @click="confirmDeps" data-testid="confirm-deps-btn" class="btn btn-primary btn-sm">Create</button>
+            <button @click="skipDeps" data-testid="skip-deps-btn" class="btn btn-ghost btn-sm">Skip</button>
+          </div>
+        </div>
+        <form method="dialog" class="modal-backdrop">
+          <button @click.prevent="skipDeps">close</button>
+        </form>
+      </dialog>
       <div class="card-body">
         <div v-if="scripts.length === 0" class="alert alert-info text-gray-600" role="alert"><AlertIcon kind="info" /><span>No scripts yet. Add a .py file or folder.</span></div>
       </div>
@@ -136,6 +163,7 @@
 
 <script setup lang="ts">
 import { computed, defineComponent, ref } from 'vue';
+import { invoke } from '@tauri-apps/api/core';
 import AlertIcon from '../components/icons/AlertIcon.vue';
 import { useAppContext } from '../composables/useAppContext';
 import { useAutoDismiss } from '../composables/useAutoDismiss';
@@ -187,6 +215,9 @@ const editError = ref<string | null>(null);
 const deleteTarget = ref<Script | null>(null);
 const linkedTasks = ref<Task[]>([]);
 const deleteError = ref('');
+
+// Deps scan state
+const pendingDeps = ref<{ folder: string; script: Script; detected: string[] } | null>(null);
 
 // Edit dialog handlers
 function openEditDialog(script: Script) {
@@ -283,12 +314,51 @@ async function confirmDelete() {
   }
 }
 
+function scriptDir(path: string): string {
+  const normalized = path.replace(/\\/g, '/');
+  const index = normalized.lastIndexOf('/');
+  return index === -1 ? path : normalized.slice(0, index);
+}
+
+async function confirmDeps() {
+  if (!pendingDeps.value) return;
+  const { folder, script, detected } = pendingDeps.value;
+  pendingDeps.value = null;
+  try {
+    await invoke('write_requirements_txt', { dirPath: folder, deps: detected });
+    await venvSync.syncFolder(script.path, script.pythonVersion ?? '3.11');
+    operationSummary.value = `Created requirements.txt with ${detected.length} dep(s).`;
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Failed to create requirements.txt.';
+  }
+}
+
+function skipDeps() {
+  if (!pendingDeps.value) return;
+  const { script } = pendingDeps.value;
+  pendingDeps.value = null;
+  // Still sync venv (with empty deps) so the venv is ready for future use
+  venvSync.syncFolder(script.path, script.pythonVersion ?? '3.11').catch(() => {});
+  operationSummary.value = 'Skipped dependency scan.';
+}
+
 async function handleAddFile() {
   const result = await addScriptFile();
   if (result.added > 0) {
-    // Sync venv for each newly added script's folder
+    // Auto-scan for deps on newly added scripts (only if no requirements.txt)
     for (const s of scripts.value) {
-      try { await venvSync.syncFolder(s.path, s.pythonVersion ?? '3.11') } catch { /* skip sync errors on add */ }
+      try {
+        const folder = scriptDir(s.path);
+        const existing = await invoke<string[]>('read_folder_requirements', { dirPath: folder });
+        if (existing.length === 0) {
+          const detected = await invoke<string[]>('scan_script_deps', { filePath: s.path });
+          if (detected.length > 0) {
+            pendingDeps.value = { folder, script: s, detected };
+            return; // Show modal first — venv sync happens after confirm
+          }
+        }
+        await venvSync.syncFolder(s.path, s.pythonVersion ?? '3.11');
+      } catch { /* skip errors on add */ }
     }
   }
   operationSummary.value = `Added ${result.added} script(s), skipped ${result.skipped}.`;
@@ -298,7 +368,18 @@ async function handleAddFolder() {
   const result = await addScriptFolder();
   if (result.added > 0) {
     for (const s of scripts.value) {
-      try { await venvSync.syncFolder(s.path, s.pythonVersion ?? '3.11') } catch { /* skip sync errors on add */ }
+      try {
+        const folder = scriptDir(s.path);
+        const existing = await invoke<string[]>('read_folder_requirements', { dirPath: folder });
+        if (existing.length === 0) {
+          const detected = await invoke<string[]>('scan_script_deps', { filePath: s.path });
+          if (detected.length > 0) {
+            pendingDeps.value = { folder, script: s, detected };
+            return;
+          }
+        }
+        await venvSync.syncFolder(s.path, s.pythonVersion ?? '3.11');
+      } catch { /* skip */ }
     }
   }
   operationSummary.value = `Added ${result.added} script(s), skipped ${result.skipped}.`;

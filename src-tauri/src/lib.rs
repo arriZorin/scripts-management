@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use tauri::Manager;
 
 mod scheduler;
+mod dep_scanner;
 mod systeminfo;
 mod venv;
 #[cfg(windows)]
@@ -433,6 +434,33 @@ fn read_folder_requirements(dir_path: String) -> Result<Vec<String>, String> {
     venv::read_requirements_txt(&dir_path)
 }
 
+#[tauri::command]
+fn scan_script_deps(file_path: String) -> Result<Vec<String>, String> {
+    if file_path.is_empty() {
+        return Err("file_path cannot be empty".to_string());
+    }
+    dep_scanner::scan_script_deps(&file_path)
+}
+
+#[tauri::command]
+fn write_requirements_txt(dir_path: String, deps: Vec<String>) -> Result<(), String> {
+    if dir_path.is_empty() {
+        return Err("dir_path cannot be empty".to_string());
+    }
+    let dir = std::path::Path::new(&dir_path);
+    if !dir.is_dir() {
+        return Err(format!("directory not found: {}", dir_path));
+    }
+    // Validate path safety: no .. traversal, no null bytes
+    if dir_path.contains("..") || dir_path.contains('\0') {
+        return Err("invalid directory path".to_string());
+    }
+    let req_path = dir.join("requirements.txt");
+    let content = deps.join("\n");
+    std::fs::write(&req_path, &content)
+        .map_err(|e| format!("failed to write requirements.txt: {}", e))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -461,6 +489,8 @@ pub fn run() {
             sync_script_deps,
             delete_script_venv,
             read_folder_requirements,
+            scan_script_deps,
+            write_requirements_txt,
             systeminfo::run_process,
             systeminfo::find_all_in_path_command,
             systeminfo::query_python_registry,
