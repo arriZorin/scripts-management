@@ -328,7 +328,6 @@ async function confirmDeps() {
     await invoke('write_requirements_txt', { dirPath: folder, deps: detected });
     // Ensure the venv exists for this folder's pythonVersion
     const folderHash = await invoke<string>('compute_folder_hash', { dirPath: folder });
-    const venvPythonPath = await invoke<string>('get_venv_python_path', { folderHash, pythonVersion: script.pythonVersion ?? '3.11' });
     await invoke('ensure_script_venv', { folderHash, pythonVersion: script.pythonVersion ?? '3.11' });
     // Sync the deps from requirements.txt into the venv
     await invoke('sync_script_deps', { folderHash, requirements: detected });

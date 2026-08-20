@@ -5,7 +5,7 @@
 //!
 //! # Idempotency
 //! - `ensure_venv`: health check before creating (checks python.exe + pyvenv.cfg + version match)
-//! - `sync_deps`: atomic write + backup + hash cache; skip uv pip sync if unchanged
+//! - `sync_deps`: atomic write + backup + hash cache; skip uv pip install if unchanged
 //! - `delete_venv`: cleans up venv + all dep files
 
 // Most functions appear unused until later phases wire them. Suppress
@@ -224,13 +224,34 @@ pub fn ensure_venv(
 
 // ── Deps sync ────────────────────────────────────────────
 
+/// Builds the uv command that installs the deps file into the venv.
+///
+/// Uses `uv pip install --requirement <file>` (NOT `uv pip sync`) so that the
+/// full dependency graph is resolved and installed. `uv pip sync` installs
+/// only the packages listed in the file and never their transitive
+/// dependencies (e.g. openpyxl without et-xmlfile), which broke scripts at
+/// import time with `ModuleNotFoundError`.
+fn build_uv_sync_command(uv: &str, venv_py: &Path, deps_path: &Path) -> std::process::Command {
+    let mut cmd = std::process::Command::new(uv);
+    cmd.args([
+        "pip",
+        "install",
+        "--requirement",
+        &deps_path.to_string_lossy(),
+        "--python",
+        &venv_py.to_string_lossy(),
+        "--quiet",
+    ]);
+    cmd
+}
+
 /// Idempotent dependency sync with atomic write + backup:
 ///   1. Compute hash of new requirements
 ///   2. If hash matches cached hash → return Ok (skip)
 ///   3. Write new requirements to a .tmp file
 ///   4. Rename existing deps/<hash>.txt → .bak (if exists)
 ///   5. Rename .tmp → deps/<hash>.txt (atomic rename)
-///   6. Run `uv pip sync --python <venv> <req-file>`
+///   6. Run `uv pip install --requirement <venv> <req-file>`
 ///   7. On success → delete .bak, write new hash file
 ///   8. On failure → restore .bak → deps/<hash>.txt, return Err
 pub fn sync_deps(
@@ -276,21 +297,11 @@ pub fn sync_deps(
     // 5. Atomic rename .tmp → .txt
     fs::rename(&tmp_path, &deps_path).map_err(|e| format!("failed to write deps file: {}", e))?;
 
-    // 6. Run uv pip sync
+    // 6. Run uv pip install --requirement (resolves transitive deps)
     let venv_py = venv_python_path(app_data, folder_hash);
     let uv = uv_path.unwrap_or("uv.exe");
-    let deps_str = deps_path.to_string_lossy().to_string();
 
-    let result = std::process::Command::new(uv)
-        .args([
-            "pip",
-            "sync",
-            "--python",
-            &venv_py.to_string_lossy(),
-            "--quiet",
-            &deps_str,
-        ])
-        .output();
+    let result = build_uv_sync_command(uv, &venv_py, &deps_path).output();
 
     match result {
         Ok(output) if output.status.success() => {
@@ -716,6 +727,49 @@ mod tests {
         // Hash should remain unchanged (not updated on failure)
         let current_hash = fs::read_to_string(deps_hash_file_path(&dir, "a1b2")).unwrap();
         assert_eq!(current_hash, old_hash, "hash should not change on failure");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sync_deps_uses_pip_install_requirement_to_resolve_transitive_deps() {
+        // Regression: `uv pip sync` installs ONLY the packages listed in the
+        // deps file and never their transitive dependencies (e.g. openpyxl
+        // without et-xmlfile), which made hello_world.py fail with
+        // `ModuleNotFoundError: No module named 'et_xmlfile'`.
+        // The sync command must be `uv pip install --requirement <file>`
+        // so the full dependency graph is resolved and installed.
+        let dir = temp_dir("sync_cmd");
+        let venv_py = venv_python_path(&dir, "a1b2");
+        let deps = deps_file_path(&dir, "a1b2");
+
+        let cmd = build_uv_sync_command("uv.exe", &venv_py, &deps);
+        let args: Vec<String> = cmd
+            .get_args()
+            .map(|a| a.to_string_lossy().to_string())
+            .collect();
+
+        assert_eq!(args[0], "pip", "expected `pip` subcommand, got: {:?}", args);
+        assert_eq!(
+            args[1], "install",
+            "must use `pip install` (not `pip sync`), got: {:?}",
+            args
+        );
+        assert!(
+            args.contains(&"--requirement".to_string()),
+            "must pass --requirement, got: {:?}",
+            args
+        );
+        assert!(
+            args.contains(&deps.to_string_lossy().to_string()),
+            "must pass the deps file, got: {:?}",
+            args
+        );
+        assert!(
+            args.contains(&"--python".to_string()),
+            "must pass --python, got: {:?}",
+            args
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }
