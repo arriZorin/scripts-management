@@ -127,13 +127,23 @@ pub fn compute_deps_fresh(cached_hash: &str, requirements: &[String]) -> bool {
 
 // ── Health check ─────────────────────────────────────────
 
-/// Reads `version` key from pyvenv.cfg. Format: "version = 3.11.5"
+/// Reads the version key from pyvenv.cfg. Accepts both formats:
+///   python -m venv: `version = 3.11.5`
+///   uv:            `version_info = 3.11`
 /// Returns the major.minor string (e.g. "3.11").
 fn read_pyvenv_version(cfg_path: &Path) -> Result<String, String> {
     let content =
         fs::read_to_string(cfg_path).map_err(|e| format!("failed to read pyvenv.cfg: {}", e))?;
     for line in content.lines() {
-        if let Some(v) = line.strip_prefix("version = ") {
+        let trimmed = line.trim();
+        let value = if let Some(v) = trimmed.strip_prefix("version = ") {
+            Some(v)
+        } else if let Some(v) = trimmed.strip_prefix("version_info = ") {
+            Some(v)
+        } else {
+            None
+        };
+        if let Some(v) = value {
             let parts: Vec<&str> = v.trim().split('.').collect();
             if parts.len() >= 2 {
                 return Ok(format!("{}.{}", parts[0], parts[1]));
@@ -542,6 +552,30 @@ mod tests {
         fs::write(venv_dir.join("pyvenv.cfg"), "version = 3.11.5\n").unwrap();
 
         let result = check_venv_health(&dir, "a1b2", "3.11");
+        assert!(result.is_ok());
+        assert!(result.unwrap().contains("python.exe"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn check_venv_health_reports_healthy_for_uv_pyvenv_cfg() {
+        // uv writes `version_info = 3.11` in pyvenv.cfg (not `version = 3.11.5`
+        // which python -m venv writes). Health check must accept both formats.
+        let dir = temp_dir("health_uv_cfg");
+        let venv_dir = dir.join("venvs").join("a1b3");
+        fs::create_dir_all(venv_dir.join("Scripts")).unwrap();
+        fs::write(venv_dir.join("Scripts").join("python.exe"), "").unwrap();
+        fs::write(
+            venv_dir.join("pyvenv.cfg"),
+            "home = C:\\uv\\python\\cpython-3.11-windows-x86_64-none\n\
+             implementation = CPython\n\
+             uv = 0.11.26\n\
+             version_info = 3.11\n\
+             include-system-site-packages = false\n",
+        )
+        .unwrap();
+
+        let result = check_venv_health(&dir, "a1b3", "3.11");
         assert!(result.is_ok());
         assert!(result.unwrap().contains("python.exe"));
         let _ = fs::remove_dir_all(&dir);

@@ -260,7 +260,7 @@ async function saveEdit() {
     closeEditDialog();
     operationSummary.value = `Updated ${trimmedName}.`;
   } catch (e) {
-    editError.value = e instanceof Error ? e.message : 'Failed to update script.';
+    editError.value = typeof e === 'string' && e.trim() ? e : e instanceof Error ? e.message : 'Failed to update script.';
   }
 }
 
@@ -329,7 +329,7 @@ async function confirmDeps() {
     await venvSync.syncFolder(script.path, script.pythonVersion ?? '3.11');
     operationSummary.value = `Created requirements.txt with ${detected.length} dep(s).`;
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Failed to create requirements.txt.';
+    error.value = typeof e === 'string' && e.trim() ? e : e instanceof Error ? e.message : 'Failed to create requirements.txt.';
   }
 }
 
@@ -414,7 +414,7 @@ async function handleRepair(script: Script) {
     await loadAndReconcile();
     operationSummary.value = `Repaired ${script.name}.`;
   } catch (e) {
-    repairError.value = e instanceof Error ? e.message : 'Failed to repair script.';
+    repairError.value = typeof e === 'string' && e.trim() ? e : e instanceof Error ? e.message : 'Failed to repair script.';
   }
 }
 
