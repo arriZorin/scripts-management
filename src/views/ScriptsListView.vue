@@ -326,7 +326,12 @@ async function confirmDeps() {
   pendingDeps.value = null;
   try {
     await invoke('write_requirements_txt', { dirPath: folder, deps: detected });
-    await venvSync.syncFolder(script.path, script.pythonVersion ?? '3.11');
+    // Ensure the venv exists for this folder's pythonVersion
+    const folderHash = await invoke<string>('compute_folder_hash', { dirPath: folder });
+    const venvPythonPath = await invoke<string>('get_venv_python_path', { folderHash, pythonVersion: script.pythonVersion ?? '3.11' });
+    await invoke('ensure_script_venv', { folderHash, pythonVersion: script.pythonVersion ?? '3.11' });
+    // Sync the deps from requirements.txt into the venv
+    await invoke('sync_script_deps', { folderHash, requirements: detected });
     operationSummary.value = `Created requirements.txt with ${detected.length} dep(s).`;
   } catch (e) {
     error.value = typeof e === 'string' && e.trim() ? e : e instanceof Error ? e.message : 'Failed to create requirements.txt.';

@@ -13,7 +13,7 @@ When a user clicks the **Add File** button on the Scripts List page, the followi
 1. **Vue UI** (`ScriptsListView.vue`) calls `handleAddFile()`.
 2. **Composable** (`useScripts.ts`) orchestrates: file picker → duplicate check → repository persistence → UI refresh → dependency auto-scan.
 3. **TypeScript services** (`ScriptPicker.ts`, `pyScriptImport.ts`) adapt to native APIs.
-4. **Rust backend** supplies only the generic file I/O commands already registered (`read_text_file`, `write_text_file`, `scan_script_deps`, etc.). File picking itself is handled by the Tauri dialog plugin.
+4. **Rust backend** supplies only the generic file I/O commands already registered (`read_text_file`, `write_text_file`, `scan_script_deps`, `compute_folder_hash`, `get_venv_python_path`, `ensure_script_venv`, `sync_script_deps`). File picking itself is handled by the Tauri dialog plugin.
 
 The entire "Add File" path is implemented on the frontend. Persistence re-uses the existing `JsonScriptRepository` + `TauriFileStorage` layer.
 
@@ -26,7 +26,7 @@ The entire "Add File" path is implemented on the frontend. Persistence re-uses t
 ```
 src/
 ├── views/
-│   └── ScriptsListView.vue              ← Step 1: button + handleAddFile
+│   └── ScriptsListView.vue              ← Step 1: button + handleAddFile + confirmDeps
 ├── services/
 │   ├── script/
 │   │   ├── import/
@@ -39,6 +39,8 @@ src/
 │   └── shared/
 │       ├── FileStorage.ts               ← port (interface)
 │       └── TauriFileStorage.ts          ← persistence adapter (invoke read/write)
+├── composables/
+│   └── useAppContext.ts                 ← DI wiring (not in this doc)
 └── models/
     └── Script.ts                        ← data model
 ```
@@ -47,7 +49,7 @@ src/
 
 | File | Role |
 |------|------|
-| `src/views/ScriptsListView.vue` | Button + `handleAddFile()` |
+| `src/views/ScriptsListView.vue` | Button + `handleAddFile()` + `confirmDeps()` (venv creation) |
 | `src/services/script/import/useScripts.ts` | `addScriptFile()` composable |
 | `src/services/script/import/ScriptPicker.ts` | `TauriScriptPicker` |
 | `src/services/script/import/pyScriptImport.ts` | `toScriptInputs()` path filter/dedupe |
@@ -63,7 +65,7 @@ src/
 ```
 src-tauri/
 └── src/
-    └── lib.rs                           ← registers generic I/O + scan commands
+    └── lib.rs                           ← registers generic I/O + scan + venv commands
 ```
 
 **Relevant existing commands (already registered in `invoke_handler`, `src-tauri/src/lib.rs:430`):**
@@ -71,6 +73,10 @@ src-tauri/
 - `scan_files` — used by the **Add Folder** path
 - `read_text_file` / `write_text_file` — used by `TauriFileStorage` for scripts.json
 - `read_folder_requirements` / `scan_script_deps` — used by the post-add dependency auto-scan
+- `compute_folder_hash` — used by `confirmDeps` to derive the venv folder
+- `get_venv_python_path` — used by `confirmDeps` to locate the venv for a folder
+- `ensure_script_venv` — used by `confirmDeps` to create the venv (uv)
+- `sync_script_deps` — used by `confirmDeps` to install deps from requirements.txt
 - Dialog plugin (`tauri_plugin_dialog`) — used by the file/folder picker
 
 ---
@@ -118,8 +124,12 @@ async function handleAddFile() {
       const existing = await invoke<string[]>('read_folder_requirements', { dirPath: folder });
       if (existing.length === 0) {
         const detected = await invoke<string[]>('scan_script_deps', { filePath: s.path });
-        // ... persist detected deps
+        if (detected.length > 0) {
+          pendingDeps.value = { folder, script: s, detected };
+          return; // Show modal first — venv sync happens after confirm
+        }
       }
+      await venvSync.syncFolder(s.path, s.pythonVersion ?? '3.11');
     }
   }
 }
@@ -127,7 +137,78 @@ async function handleAddFile() {
 
 User click → `handleAddFile()` → `addScriptFile()` → on success, dependency auto-scan per new script.
 
----
+### Step 1b — Dependencies Detected Modal
+
+**Location:** `src/views/ScriptsListView.vue` (lines 126–151)
+
+```vue
+<!-- Deps scan modal -->
+<dialog id="deps-dialog" v-if="pendingDeps" data-testid="deps-dialog" class="modal modal-open" role="dialog">
+  <div class="modal-box p-4 max-w-md">
+    <h3 class="text-lg font-bold mb-2">Dependencies Detected</h3>
+    <p class="text-sm text-gray-600 mb-4">
+      No <code>requirements.txt</code> found in this folder. The following
+      third-party packages were detected:
+    </p>
+    <div class="mb-4 space-y-1">
+      <div v-for="dep in pendingDeps.detected" :key="dep" class="flex items-center gap-2 p-2 bg-gray-50 rounded dark:bg-[#3a3a3a]">
+        <code class="text-sm">{{ dep }}</code>
+      </div>
+    </div>
+    <p class="text-sm text-gray-500 mb-4">
+      Create a <code>requirements.txt</code> file? Dependencies will be
+      installed in the folder's virtual environment.
+    </p>
+    <div class="flex gap-2 justify-end">
+      <button @click="confirmDeps" data-testid="confirm-deps-btn" class="btn btn-primary btn-sm">Create</button>
+      <button @click="skipDeps" data-testid="skip-deps-btn" class="btn btn-ghost btn-sm">Skip</button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button @click.prevent="skipDeps">close</button>
+  </form>
+</dialog>
+```
+
+### Step 1c — Confirm Dependencies (venv creation)
+
+**Location:** `src/views/ScriptsListView.vue` (lines 323–334)
+
+```ts
+async function confirmDeps() {
+  if (!pendingDeps.value) return;
+  const { folder, script, detected } = pendingDeps.value;
+  pendingDeps.value = null;
+  try {
+    // 1. Write requirements.txt
+    await invoke('write_requirements_txt', { dirPath: folder, deps: detected });
+
+    // 2. Ensure the venv exists for this folder's pythonVersion
+    const folderHash = await invoke<string>('compute_folder_hash', { dirPath: folder });
+    const venvPythonPath = await invoke<string>('get_venv_python_path', {
+      folderHash,
+      pythonVersion: script.pythonVersion ?? '3.11',
+    });
+    await invoke('ensure_script_venv', { folderHash, pythonVersion: script.pythonVersion ?? '3.11' });
+
+    // 3. Sync the deps from requirements.txt into the venv
+    await invoke('sync_script_deps', { folderHash, requirements: detected });
+
+    operationSummary.value = `Created requirements.txt with ${detected.length} dep(s).`;
+  } catch (e) {
+    error.value = typeof e === 'string' && e.trim() ? e : e instanceof Error ? e.message : 'Failed to create requirements.txt.';
+  }
+}
+```
+
+**Why the venv creation is split across three invocations:**
+
+- `compute_folder_hash(folder)` → returns a 16-char hex hash of the folder's contents.
+- `get_venv_python_path(folderHash, pythonVersion)` → returns the full path to the venv's Python executable.
+- `ensure_script_venv(folderHash, pythonVersion)` → creates the venv in `AppData\Local\com.scriptsmanagement.app\venvs\<hash>\` if it doesn't exist.
+- `sync_script_deps(folderHash, requirements)` → invokes `pip install` inside the venv using the `requirements.txt` content.
+
+This split allows the Rust layer to remain stateless and testable without a Tauri state.
 
 ### Step 2 — Composable Layer
 
@@ -292,17 +373,20 @@ ScriptsListView
 All file I/O goes through the generic Rust commands that are already present.
 
 ---
+
 ## Summary
 
-| Aspect                    | Status                                      |
-|---------------------------|---------------------------------------------|
-| Vue button + handler      | ✅ Implemented                              |
-| Composable (`addScriptFile`) | ✅ Implemented                           |
-| File picker (dialog plugin) | ✅ Implemented                            |
-| Duplicate filtering       | ✅ Implemented (`toScriptInputs`)           |
-| Persistence via repository| ✅ Implemented (existing I/O commands)      |
-| Post-add dep auto-scan    | ✅ Implemented (`handleAddFile`)            |
-| Unit tests                | ✅ Implemented (`useScripts.test.ts`)       |
+| Aspect | Status |
+|--------|--------|
+| Vue button + handler | ✅ Implemented |
+| Composable (`addScriptFile`) | ✅ Implemented |
+| File picker (dialog plugin) | ✅ Implemented |
+| Duplicate filtering | ✅ Implemented (`toScriptInputs`) |
+| Persistence via repository | ✅ Implemented (existing I/O commands) |
+| Post-add dep auto-scan | ✅ Implemented (`handleAddFile`) |
+| Dependencies Detected modal | ✅ Implemented |
+| Venv creation on confirm | ✅ Implemented (`confirmDeps`) |
+| Unit tests | ✅ Implemented (`useScripts.test.ts`) |
 
 **Conclusion:** The "Add File" workflow is complete on the frontend. The original claim that a new Rust command was missing was incorrect; the dialog plugin and the existing `read_text_file` / `write_text_file` commands already cover the required native interactions.
 
