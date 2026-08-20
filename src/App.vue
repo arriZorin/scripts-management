@@ -13,11 +13,11 @@ import TaskIcon from './components/icons/TaskIcon.vue';
 import LoggingIcon from './components/icons/LoggingIcon.vue';
 import SettingIcon from './components/icons/SettingIcon.vue';
 import type { Component } from 'vue';
-import { AppLogger } from './services/AppLogger';
-import type { LogRepository } from './services/LogRepository';
-import type { ScriptRepository } from './services/ScriptRepository';
-import type { TaskRepository } from './services/TaskRepository';
-import type { TaskRunRepository } from './services/TaskRunRepository';
+import { AppLogger } from './services/log/AppLogger';
+import type { LogRepository } from './services/log/LogRepository';
+import type { ScriptRepository } from './services/script/ScriptRepository';
+import type { TaskRepository } from './services/task/TaskRepository';
+import type { TaskRunRepository } from './services/task/TaskRunRepository';
 
 interface Props {
   scriptRepository?: ScriptRepository;

@@ -4,7 +4,7 @@ import HomeView from './HomeView.vue'
 import { appContextKey, createAppContext } from '../composables/useAppContext'
 import type { Task } from '../models/Task'
 import type { TaskRun } from '../models/TaskRun'
-import type { SystemInfo } from '../services/systemInfo'
+import type { SystemInfo } from '../services/home/systemInfo'
 import type { RequirementCheckResult, RuntimeRequirement } from '../services/runtimeCheck/types'
 
 function task(id: string, name: string): Task {

@@ -4,8 +4,8 @@ import { useAppContext } from '../composables/useAppContext';
 import type { Script } from '../models/Script';
 import type { Task } from '../models/Task';
 import type { TaskRun } from '../models/TaskRun';
-import { computeDashboardStats, type DashboardStats } from '../services/dashboardStats';
-import type { SystemInfo } from '../services/systemInfo';
+import { computeDashboardStats, type DashboardStats } from '../services/home/dashboardStats';
+import type { SystemInfo } from '../services/home/systemInfo';
 import type { RequirementCheckResult } from '../services/runtimeCheck/types';
 
 interface Props {

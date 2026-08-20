@@ -5,9 +5,9 @@ import { appContextKey, createAppContext } from '../composables/useAppContext'
 import type { Script } from '../models/Script'
 import type { Task, TaskInput } from '../models/Task'
 import type { TaskRun } from '../models/TaskRun'
-import { TaskRunRecorder } from '../services/TaskRunRecorder'
-import type { TaskRunRepository } from '../services/TaskRunRepository'
-import type { ScriptPathChecker } from '../services/scriptPathChecker'
+import { TaskRunRecorder } from '../services/task/TaskRunRecorder'
+import type { TaskRunRepository } from '../services/task/TaskRunRepository'
+import type { ScriptPathChecker } from '../services/script/scriptPathChecker'
 import type { RequirementCheckResult } from '../services/runtimeCheck/types'
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
