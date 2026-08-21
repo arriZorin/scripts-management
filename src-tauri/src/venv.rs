@@ -642,6 +642,52 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    #[test]
+    #[ignore = "requires uv on PATH; run explicitly with cargo test -- --ignored live_venv_create_and_sync"]
+    fn live_venv_create_and_sync() {
+        // Live verification of the full new path against real uv:
+        // ensure_venv creates <folder>/.venv, sync_deps installs requirements
+        // into it, and the venv python can import the installed dep.
+        let dir = temp_dir("live_venv");
+        let folder_dir = dir.join("scripts");
+        fs::create_dir_all(&folder_dir).unwrap();
+        fs::write(folder_dir.join("requirements.txt"), "openpyxl\n").unwrap();
+        let folder_hash = folder_hash(&folder_dir.to_string_lossy());
+
+        // ensure_venv creates the local .venv
+        let py = ensure_venv(&dir, &folder_dir, "3.11", None).expect("ensure_venv should create .venv");
+        assert!(py.ends_with(".venv\\Scripts\\python.exe") || py.ends_with(".venv/Scripts/python.exe"),
+            "venv python should be inside <folder>/.venv, got: {}", py);
+        assert!(venv_dir(&folder_dir).is_dir(), ".venv dir should exist");
+
+        // sync_deps installs openpyxl (+ transitive et_xmlfile)
+        let reqs = read_requirements_txt(&folder_dir.to_string_lossy()).unwrap();
+        sync_deps(&dir, &folder_dir, &reqs, None).expect("sync_deps should install deps");
+        assert!(deps_hash_file_path(&dir, &folder_hash).is_file(), "deps hash cache should exist");
+
+        // The venv python actually runs the script importing the dep
+        let script = folder_dir.join("check.py");
+        fs::write(&script, "import openpyxl\nprint('openpyxl-ok')\n").unwrap();
+        let out = std::process::Command::new(&py)
+            .arg(&script)
+            .output()
+            .expect("run script in venv");
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert!(out.status.success(), "venv python should run: {}", String::from_utf8_lossy(&out.stderr));
+        assert!(stdout.contains("openpyxl-ok"), "stdout: {}", stdout);
+
+        // Idempotency: second ensure is a no-op health check pass
+        let py2 = ensure_venv(&dir, &folder_dir, "3.11", None).unwrap();
+        assert_eq!(py, py2);
+
+        // delete_venv removes the local .venv and cache
+        delete_venv(&dir, &folder_dir).unwrap();
+        assert!(!venv_dir(&folder_dir).exists(), ".venv should be deleted");
+        assert!(!deps_hash_file_path(&dir, &folder_hash).exists(), "deps cache should be deleted");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     // ── Deps sync file I/O tests ────────────────────────
 
     #[test]

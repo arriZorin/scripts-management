@@ -201,12 +201,12 @@ async function confirmDeps() {
 }
 ```
 
-**Why the venv creation is split across three invocations:**
+**Why the venv creation is split across invocations:**
 
-- `compute_folder_hash(folder)` → returns a 16-char hex hash of the folder's contents.
-- `get_venv_python_path(folderHash, pythonVersion)` → returns the full path to the venv's Python executable.
-- `ensure_script_venv(folderHash, pythonVersion)` → creates the venv in `AppData\Local\com.scriptsmanagement.app\venvs\<hash>\` if it doesn't exist.
-- `sync_script_deps(folderHash, requirements)` → invokes `pip install` inside the venv using the `requirements.txt` content.
+- `ensure_script_venv(dirPath, pythonVersion)` → creates the venv at `<script folder>/.venv\` (uv default) if it doesn't exist. Health check first (python.exe + pyvenv.cfg + version match) — 0 subprocess cost if healthy. If recreated, the deps hash cache is cleared so `sync_script_deps` won't skip the fresh venv.
+- `get_venv_python_path(dirPath)` → returns the full path to the venv's Python executable (`<folder>/.venv/Scripts/python.exe`).
+- `sync_script_deps(dirPath, requirements)` → invokes `pip install --requirement` inside the venv using the requirements content (resolves transitive deps; internal AppData hash-cache decides skip-vs-install).
+- `compute_folder_hash` is **removed** — commands are keyed by `dirPath` directly.
 
 This split allows the Rust layer to remain stateless and testable without a Tauri state.
 
