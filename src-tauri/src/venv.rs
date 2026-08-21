@@ -47,22 +47,19 @@ fn hex_encode(bytes: &[u8]) -> String {
 
 // ── Path helpers ─────────────────────────────────────────
 
-/// Returns the app-data relative venv directory for a folder hash.
-/// app-data/venvs/<hash>/
-pub fn venv_dir(app_data: &Path, folder_hash: &str) -> PathBuf {
-    app_data.join("venvs").join(folder_hash)
+/// Returns the venv directory inside the script folder: <folder>/.venv
+pub fn venv_dir(folder_dir: &Path) -> PathBuf {
+    folder_dir.join(".venv")
 }
 
 /// Returns the venv's python.exe path.
-pub fn venv_python_path(app_data: &Path, folder_hash: &str) -> PathBuf {
-    venv_dir(app_data, folder_hash)
-        .join("Scripts")
-        .join("python.exe")
+pub fn venv_python_path(folder_dir: &Path) -> PathBuf {
+    venv_dir(folder_dir).join("Scripts").join("python.exe")
 }
 
 /// Returns the pyvenv.cfg path for a venv.
-pub fn venv_cfg_path(app_data: &Path, folder_hash: &str) -> PathBuf {
-    venv_dir(app_data, folder_hash).join("pyvenv.cfg")
+pub fn venv_cfg_path(folder_dir: &Path) -> PathBuf {
+    venv_dir(folder_dir).join("pyvenv.cfg")
 }
 
 /// Returns app-data/deps/<hash>.txt — the combined requirements file.
@@ -157,11 +154,10 @@ fn read_pyvenv_version(cfg_path: &Path) -> Result<String, String> {
 /// (2) pyvenv.cfg exists, (3) version in pyvenv.cfg matches
 /// `python_version`. Returns Ok(path) if healthy.
 pub fn check_venv_health(
-    app_data: &Path,
-    folder_hash: &str,
+    folder_dir: &Path,
     python_version: &str,
 ) -> Result<String, String> {
-    let py_path = venv_python_path(app_data, folder_hash);
+    let py_path = venv_python_path(folder_dir);
     if !py_path.is_file() {
         return Err(format!(
             "python.exe not found at {}",
@@ -169,7 +165,7 @@ pub fn check_venv_health(
         ));
     }
 
-    let cfg_path = venv_cfg_path(app_data, folder_hash);
+    let cfg_path = venv_cfg_path(folder_dir);
     let actual_version = read_pyvenv_version(&cfg_path)?;
 
     if actual_version != python_version {
@@ -184,27 +180,33 @@ pub fn check_venv_health(
 
 // ── Ensure ───────────────────────────────────────────────
 
-/// Ensures a healthy venv exists. Calls check_venv_health first;
+/// Ensures a healthy venv exists in the script folder (<folder>/.venv).
+/// Calls check_venv_health first;
 /// if healthy → return path (0 subprocess cost).
-/// If unhealthy → delete + recreate via `uv venv --python <ver>`.
+/// If unhealthy → delete + recreate via `uv venv --python <ver>` and clear
+/// the deps hash cache so the fresh venv is not skipped by sync_deps.
 ///
 /// `uv_path` is the path to uv.exe; `None` for testing (no subprocess).
 pub fn ensure_venv(
     app_data: &Path,
-    folder_hash: &str,
+    folder_dir: &Path,
     python_version: &str,
     uv_path: Option<&str>,
 ) -> Result<String, String> {
     // Try health check first
-    if let Ok(path) = check_venv_health(app_data, folder_hash, python_version) {
+    if let Ok(path) = check_venv_health(folder_dir, python_version) {
         return Ok(path);
     }
 
     // Unhealthy or missing — delete and recreate
-    let _ = fs::remove_dir_all(venv_dir(app_data, folder_hash));
+    let _ = fs::remove_dir_all(venv_dir(folder_dir));
+
+    // Clear the deps hash cache so sync_deps won't skip the fresh venv
+    let folder_hash = folder_hash(&folder_dir.to_string_lossy());
+    let _ = fs::remove_file(deps_hash_file_path(app_data, &folder_hash));
 
     let uv = uv_path.unwrap_or("uv.exe");
-    let venv = venv_dir(app_data, folder_hash);
+    let venv = venv_dir(folder_dir);
     let venv_str = venv.to_string_lossy().to_string();
 
     // Use run_process pattern: CREATE_NO_WINDOW + spawn + wait
@@ -219,7 +221,7 @@ pub fn ensure_venv(
     }
 
     // Verify post-creation health
-    check_venv_health(app_data, folder_hash, python_version)
+    check_venv_health(folder_dir, python_version)
 }
 
 // ── Deps sync ────────────────────────────────────────────
@@ -256,15 +258,16 @@ fn build_uv_sync_command(uv: &str, venv_py: &Path, deps_path: &Path) -> std::pro
 ///   8. On failure → restore .bak → deps/<hash>.txt, return Err
 pub fn sync_deps(
     app_data: &Path,
-    folder_hash: &str,
+    folder_dir: &Path,
     requirements: &[String],
     uv_path: Option<&str>,
 ) -> Result<(), String> {
     // 1. Compute hash
     let new_hash = compute_requirements_hash(requirements);
+    let folder_hash = folder_hash(&folder_dir.to_string_lossy());
 
     // 2. Check cached hash — skip if unchanged
-    let hash_path = deps_hash_file_path(app_data, folder_hash);
+    let hash_path = deps_hash_file_path(app_data, &folder_hash);
     if hash_path.is_file() {
         let cached =
             fs::read_to_string(&hash_path).map_err(|e| format!("failed to read hash: {}", e))?;
@@ -273,9 +276,9 @@ pub fn sync_deps(
         }
     }
 
-    let deps_path = deps_file_path(app_data, folder_hash);
-    let tmp_path = deps_tmp_file_path(app_data, folder_hash);
-    let bak_path = deps_backup_file_path(app_data, folder_hash);
+    let deps_path = deps_file_path(app_data, &folder_hash);
+    let tmp_path = deps_tmp_file_path(app_data, &folder_hash);
+    let bak_path = deps_backup_file_path(app_data, &folder_hash);
 
     // Ensure deps directory exists
     if let Some(parent) = deps_path.parent() {
@@ -298,7 +301,7 @@ pub fn sync_deps(
     fs::rename(&tmp_path, &deps_path).map_err(|e| format!("failed to write deps file: {}", e))?;
 
     // 6. Run uv pip install --requirement (resolves transitive deps)
-    let venv_py = venv_python_path(app_data, folder_hash);
+    let venv_py = venv_python_path(folder_dir);
     let uv = uv_path.unwrap_or("uv.exe");
 
     let result = build_uv_sync_command(uv, &venv_py, &deps_path).output();
@@ -335,10 +338,13 @@ fn restore_backup(bak_path: &Path, deps_path: &Path, had_backup: bool) {
 
 // ── Cleanup ──────────────────────────────────────────────
 
-/// Deletes the venv directory and all dep files for a folder hash.
-pub fn delete_venv(app_data: &Path, folder_hash: &str) -> Result<(), String> {
+/// Deletes the venv directory (in the script folder) and all dep files
+/// for the folder's hash.
+pub fn delete_venv(app_data: &Path, folder_dir: &Path) -> Result<(), String> {
+    let folder_hash = folder_hash(&folder_dir.to_string_lossy());
+
     // Delete venv directory
-    let vdir = venv_dir(app_data, folder_hash);
+    let vdir = venv_dir(folder_dir);
     if vdir.is_dir() {
         fs::remove_dir_all(&vdir)
             .map_err(|e| format!("failed to delete venv '{}': {}", vdir.to_string_lossy(), e))?;
@@ -346,10 +352,10 @@ pub fn delete_venv(app_data: &Path, folder_hash: &str) -> Result<(), String> {
 
     // Delete dep files
     let paths = [
-        deps_file_path(app_data, folder_hash),
-        deps_hash_file_path(app_data, folder_hash),
-        deps_backup_file_path(app_data, folder_hash),
-        deps_tmp_file_path(app_data, folder_hash),
+        deps_file_path(app_data, &folder_hash),
+        deps_hash_file_path(app_data, &folder_hash),
+        deps_backup_file_path(app_data, &folder_hash),
+        deps_tmp_file_path(app_data, &folder_hash),
     ];
     for p in &paths {
         let _ = fs::remove_file(p);
@@ -441,13 +447,18 @@ mod tests {
     // ── Path helper tests ────────────────────────────────
 
     #[test]
-    fn venv_python_path_points_to_scripts_exe() {
-        let app_data = PathBuf::from("C:\\appdata");
-        let path = venv_python_path(&app_data, "a1b2c3d4e5f67890");
-        let s = path.to_string_lossy();
-        assert!(s.contains("venvs"));
-        assert!(s.contains("a1b2c3d4e5f67890"));
-        assert!(s.contains("python.exe"));
+    fn venv_python_path_points_into_script_folder() {
+        let folder = PathBuf::from("D:\\\\LEARN\\\\python\\\\hello");
+        let vdir = venv_dir(&folder);
+        let s = vdir.to_string_lossy();
+        assert!(s.ends_with(".venv"), "expected .venv in script folder, got: {}", s);
+
+        let py = venv_python_path(&folder).to_string_lossy().to_string();
+        assert!(py.contains(".venv"));
+        assert!(py.ends_with("python.exe"));
+
+        let cfg = venv_cfg_path(&folder).to_string_lossy().to_string();
+        assert!(cfg.ends_with("pyvenv.cfg"));
     }
 
     #[test]
@@ -557,12 +568,12 @@ mod tests {
     #[test]
     fn check_venv_health_reports_healthy() {
         let dir = temp_dir("health_ok");
-        let venv_dir = dir.join("venvs").join("a1b2");
+        let venv_dir = dir.join(".venv");
         fs::create_dir_all(venv_dir.join("Scripts")).unwrap();
         fs::write(venv_dir.join("Scripts").join("python.exe"), "").unwrap();
         fs::write(venv_dir.join("pyvenv.cfg"), "version = 3.11.5\n").unwrap();
 
-        let result = check_venv_health(&dir, "a1b2", "3.11");
+        let result = check_venv_health(&dir, "3.11");
         assert!(result.is_ok());
         assert!(result.unwrap().contains("python.exe"));
         let _ = fs::remove_dir_all(&dir);
@@ -573,12 +584,12 @@ mod tests {
         // uv writes `version_info = 3.11` in pyvenv.cfg (not `version = 3.11.5`
         // which python -m venv writes). Health check must accept both formats.
         let dir = temp_dir("health_uv_cfg");
-        let venv_dir = dir.join("venvs").join("a1b3");
+        let venv_dir = dir.join(".venv");
         fs::create_dir_all(venv_dir.join("Scripts")).unwrap();
         fs::write(venv_dir.join("Scripts").join("python.exe"), "").unwrap();
         fs::write(
             venv_dir.join("pyvenv.cfg"),
-            "home = C:\\uv\\python\\cpython-3.11-windows-x86_64-none\n\
+            "home = C:\\\\uv\\\\python\\\\cpython-3.11-windows-x86_64-none\n\
              implementation = CPython\n\
              uv = 0.11.26\n\
              version_info = 3.11\n\
@@ -586,7 +597,7 @@ mod tests {
         )
         .unwrap();
 
-        let result = check_venv_health(&dir, "a1b3", "3.11");
+        let result = check_venv_health(&dir, "3.11");
         assert!(result.is_ok());
         assert!(result.unwrap().contains("python.exe"));
         let _ = fs::remove_dir_all(&dir);
@@ -595,7 +606,7 @@ mod tests {
     #[test]
     fn check_venv_health_fails_on_missing_python() {
         let dir = temp_dir("health_missing_py");
-        let result = check_venv_health(&dir, "nonexistent", "3.11");
+        let result = check_venv_health(&dir, "3.11");
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("python.exe"));
         let _ = fs::remove_dir_all(&dir);
@@ -604,12 +615,12 @@ mod tests {
     #[test]
     fn check_venv_health_fails_on_version_mismatch() {
         let dir = temp_dir("health_version");
-        let venv_dir = dir.join("venvs").join("b2c3");
+        let venv_dir = dir.join(".venv");
         fs::create_dir_all(venv_dir.join("Scripts")).unwrap();
         fs::write(venv_dir.join("Scripts").join("python.exe"), "").unwrap();
         fs::write(venv_dir.join("pyvenv.cfg"), "version = 3.10.0\n").unwrap();
 
-        let result = check_venv_health(&dir, "b2c3", "3.11");
+        let result = check_venv_health(&dir, "3.11");
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.contains("3.11"), "error should mention expected version: {}", err);
@@ -620,12 +631,12 @@ mod tests {
     #[test]
     fn check_venv_health_fails_on_missing_pyvenv_cfg() {
         let dir = temp_dir("health_no_cfg");
-        let venv_dir = dir.join("venvs").join("c3d4");
+        let venv_dir = dir.join(".venv");
         fs::create_dir_all(venv_dir.join("Scripts")).unwrap();
         fs::write(venv_dir.join("Scripts").join("python.exe"), "").unwrap();
         // No pyvenv.cfg
 
-        let result = check_venv_health(&dir, "c3d4", "3.11");
+        let result = check_venv_health(&dir, "3.11");
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("pyvenv.cfg"));
         let _ = fs::remove_dir_all(&dir);
@@ -636,35 +647,38 @@ mod tests {
     #[test]
     fn sync_deps_writes_requirements_file_and_creates_backup() {
         let dir = temp_dir("sync_deps_io");
+        let folder_dir = dir.join("scripts");
+        fs::create_dir_all(&folder_dir).unwrap();
+        let folder_hash = folder_hash(&folder_dir.to_string_lossy());
         let deps_dir = dir.join("deps");
         fs::create_dir_all(&deps_dir).unwrap();
 
         // Simulate previous deps with known content and hash
         let hash = compute_requirements_hash(&["oldpkg".to_string()]);
-        fs::write(deps_hash_file_path(&dir, "a1b2"), &hash).unwrap();
-        fs::write(deps_file_path(&dir, "a1b2"), "oldpkg\n").unwrap();
+        fs::write(deps_hash_file_path(&dir, &folder_hash), &hash).unwrap();
+        fs::write(deps_file_path(&dir, &folder_hash), "oldpkg\n").unwrap();
 
         // Now sync with new deps — hash differs so should proceed
         let result = sync_deps_io_only(
             &dir,
-            "a1b2",
+            &folder_hash,
             &["pandas".to_string(), "requests".to_string()],
         );
         assert!(result.is_ok());
 
         // Verify file was written
-        let content = fs::read_to_string(deps_file_path(&dir, "a1b2")).unwrap();
+        let content = fs::read_to_string(deps_file_path(&dir, &folder_hash)).unwrap();
         assert_eq!(content, "pandas\nrequests");
 
         // Verify hash was updated
-        let new_hash = fs::read_to_string(deps_hash_file_path(&dir, "a1b2")).unwrap();
+        let new_hash = fs::read_to_string(deps_hash_file_path(&dir, &folder_hash)).unwrap();
         assert_eq!(
             new_hash,
             compute_requirements_hash(&["pandas".to_string(), "requests".to_string()])
         );
 
         // Backup should be gone on success
-        assert!(!deps_backup_file_path(&dir, "a1b2").exists());
+        assert!(!deps_backup_file_path(&dir, &folder_hash).exists());
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -672,24 +686,27 @@ mod tests {
     #[test]
     fn sync_deps_skips_when_hash_unchanged() {
         let dir = temp_dir("sync_deps_skip");
+        let folder_dir = dir.join("scripts");
+        fs::create_dir_all(&folder_dir).unwrap();
+        let folder_hash = folder_hash(&folder_dir.to_string_lossy());
         let deps_dir = dir.join("deps");
         fs::create_dir_all(&deps_dir).unwrap();
 
         let hash = compute_requirements_hash(&["pandas".to_string()]);
-        fs::write(deps_hash_file_path(&dir, "a1b2"), &hash).unwrap();
-        fs::write(deps_file_path(&dir, "a1b2"), "pandas\n").unwrap();
+        fs::write(deps_hash_file_path(&dir, &folder_hash), &hash).unwrap();
+        fs::write(deps_file_path(&dir, &folder_hash), "pandas\n").unwrap();
 
         // Track timestamp to detect if file was re-written
-        let original_meta = fs::metadata(deps_file_path(&dir, "a1b2")).unwrap();
+        let original_meta = fs::metadata(deps_file_path(&dir, &folder_hash)).unwrap();
         let original_modified = original_meta.modified().unwrap();
 
         // Sync with same deps
         std::thread::sleep(std::time::Duration::from_millis(50)); // ensure time diff
-        let result = sync_deps_io_only(&dir, "a1b2", &["pandas".to_string()]);
+        let result = sync_deps_io_only(&dir, &folder_hash, &["pandas".to_string()]);
         assert!(result.is_ok());
 
         // File should NOT have been re-written (skip)
-        let new_meta = fs::metadata(deps_file_path(&dir, "a1b2")).unwrap();
+        let new_meta = fs::metadata(deps_file_path(&dir, &folder_hash)).unwrap();
         assert_eq!(
             original_modified, new_meta.modified().unwrap(),
             "file should not be modified when deps unchanged"
@@ -701,31 +718,34 @@ mod tests {
     #[test]
     fn sync_deps_restores_backup_on_failure() {
         let dir = temp_dir("sync_deps_fail");
+        let folder_dir = dir.join("scripts");
+        fs::create_dir_all(&folder_dir).unwrap();
+        let folder_hash = folder_hash(&folder_dir.to_string_lossy());
         let deps_dir = dir.join("deps");
         fs::create_dir_all(&deps_dir).unwrap();
 
         // Initial deps
-        fs::write(deps_file_path(&dir, "a1b2"), "original_dep\n").unwrap();
+        fs::write(deps_file_path(&dir, &folder_hash), "original_dep\n").unwrap();
         let old_hash = compute_requirements_hash(&["original_dep".to_string()]);
-        fs::write(deps_hash_file_path(&dir, "a1b2"), &old_hash).unwrap();
+        fs::write(deps_hash_file_path(&dir, &folder_hash), &old_hash).unwrap();
 
         // Simulate failure during sync (pass bogus requirements.json to trigger failure)
         // We use sync_deps_restore_test which mimics the write + backup flow
         // but signals failure after the rename
         let result = sync_deps_with_simulated_failure(
             &dir,
-            "a1b2",
+            &folder_hash,
             &["new_dep".to_string()],
         );
         // Should be error
         assert!(result.is_err(), "sync should fail");
 
         // Original content should be restored
-        let content = fs::read_to_string(deps_file_path(&dir, "a1b2")).unwrap();
+        let content = fs::read_to_string(deps_file_path(&dir, &folder_hash)).unwrap();
         assert_eq!(content, "original_dep\n", "original should be restored after failure");
 
         // Hash should remain unchanged (not updated on failure)
-        let current_hash = fs::read_to_string(deps_hash_file_path(&dir, "a1b2")).unwrap();
+        let current_hash = fs::read_to_string(deps_hash_file_path(&dir, &folder_hash)).unwrap();
         assert_eq!(current_hash, old_hash, "hash should not change on failure");
 
         let _ = fs::remove_dir_all(&dir);
@@ -740,8 +760,11 @@ mod tests {
         // The sync command must be `uv pip install --requirement <file>`
         // so the full dependency graph is resolved and installed.
         let dir = temp_dir("sync_cmd");
-        let venv_py = venv_python_path(&dir, "a1b2");
-        let deps = deps_file_path(&dir, "a1b2");
+        let folder_dir = dir.join("scripts");
+        fs::create_dir_all(&folder_dir).unwrap();
+        let folder_hash = folder_hash(&folder_dir.to_string_lossy());
+        let venv_py = venv_python_path(&folder_dir);
+        let deps = deps_file_path(&dir, &folder_hash);
 
         let cmd = build_uv_sync_command("uv.exe", &venv_py, &deps);
         let args: Vec<String> = cmd
@@ -779,20 +802,23 @@ mod tests {
     #[test]
     fn delete_venv_removes_directory_and_dep_files() {
         let dir = temp_dir("delete_test");
-        let vdir = venv_dir(&dir, "d1e2");
+        let folder_dir = dir.join("scripts");
+        fs::create_dir_all(&folder_dir).unwrap();
+        let folder_hash = folder_hash(&folder_dir.to_string_lossy());
+        let vdir = venv_dir(&folder_dir);
         fs::create_dir_all(vdir.join("Scripts")).unwrap();
         fs::write(vdir.join("Scripts").join("python.exe"), "").unwrap();
         // Ensure deps parent dir exists before writing
         let deps_dir = dir.join("deps");
         fs::create_dir_all(&deps_dir).unwrap();
-        fs::write(deps_file_path(&dir, "d1e2"), "pandas").unwrap();
-        fs::write(deps_hash_file_path(&dir, "d1e2"), "hash").unwrap();
+        fs::write(deps_file_path(&dir, &folder_hash), "pandas").unwrap();
+        fs::write(deps_hash_file_path(&dir, &folder_hash), "hash").unwrap();
 
-        delete_venv(&dir, "d1e2").unwrap();
+        delete_venv(&dir, &folder_dir).unwrap();
 
-        assert!(!venv_dir(&dir, "d1e2").exists(), "venv dir should be deleted");
-        assert!(!deps_file_path(&dir, "d1e2").exists(), "deps file should be deleted");
-        assert!(!deps_hash_file_path(&dir, "d1e2").exists(), "hash file should be deleted");
+        assert!(!venv_dir(&folder_dir).exists(), "venv dir should be deleted");
+        assert!(!deps_file_path(&dir, &folder_hash).exists(), "deps file should be deleted");
+        assert!(!deps_hash_file_path(&dir, &folder_hash).exists(), "hash file should be deleted");
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -800,7 +826,8 @@ mod tests {
     #[test]
     fn delete_venv_noops_on_nonexistent() {
         let dir = temp_dir("delete_noop");
-        let result = delete_venv(&dir, "nonexistent");
+        let folder_dir = dir.join("no_such_folder");
+        let result = delete_venv(&dir, &folder_dir);
         assert!(result.is_ok(), "deleting non-existent venv should be ok");
         let _ = fs::remove_dir_all(&dir);
     }

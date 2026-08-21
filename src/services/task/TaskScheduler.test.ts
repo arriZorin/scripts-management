@@ -41,22 +41,20 @@ describe('TauriTaskScheduler', () => {
   })
 
   it('creates a task with venv orchestration and no requirements', async () => {
-    // Mock the venv orchestration calls in order
+    // Mock the venv orchestration calls in order (compute_folder_hash removed, dirPath used)
     mockedInvoke
-      .mockResolvedValueOnce('a1b2c3d4e5f67890')        // compute_folder_hash
       .mockResolvedValueOnce([])                          // read_folder_requirements (empty)
-      .mockResolvedValueOnce(undefined)                            // ensure_script_venv (no return needed)
+      .mockResolvedValueOnce(undefined)                    // ensure_script_venv (no return needed)
       .mockResolvedValueOnce('C:/AppData/venvs/a1b2/Scripts/python.exe')  // get_venv_python_path
       .mockResolvedValueOnce('C:/AppData/logs')            // get_log_directory
 
     await new TauriTaskScheduler().create(task(), script)
 
-    // Verify venv orchestration calls
-    expect(mockedInvoke).toHaveBeenNthCalledWith(1, 'compute_folder_hash', { dirPath: 'C:/scripts' })
-    expect(mockedInvoke).toHaveBeenNthCalledWith(2, 'read_folder_requirements', { dirPath: 'C:/scripts' })
-    expect(mockedInvoke).toHaveBeenNthCalledWith(3, 'ensure_script_venv', { folderHash: 'a1b2c3d4e5f67890', pythonVersion: '3.11' })
-    expect(mockedInvoke).toHaveBeenNthCalledWith(4, 'get_venv_python_path', { folderHash: 'a1b2c3d4e5f67890' })
-    expect(mockedInvoke).toHaveBeenNthCalledWith(6, 'create_scheduled_task', {
+    // Verify venv orchestration calls (compute_folder_hash removed)
+    expect(mockedInvoke).toHaveBeenNthCalledWith(1, 'read_folder_requirements', { dirPath: 'C:/scripts' })
+    expect(mockedInvoke).toHaveBeenNthCalledWith(2, 'ensure_script_venv', { dirPath: 'C:/scripts', pythonVersion: '3.11' })
+    expect(mockedInvoke).toHaveBeenNthCalledWith(3, 'get_venv_python_path', { dirPath: 'C:/scripts' })
+    expect(mockedInvoke).toHaveBeenNthCalledWith(5, 'create_scheduled_task', {
       taskName: 'ScriptsManagement\\task-1',
       venvPythonPath: 'C:/AppData/venvs/a1b2/Scripts/python.exe',
       scriptPath: 'C:/scripts/backup.py',
@@ -69,28 +67,26 @@ describe('TauriTaskScheduler', () => {
 
   it('syncs requirements when requirements.txt exists', async () => {
     mockedInvoke
-      .mockResolvedValueOnce('a1b2c3d4e5f67890')        // compute_folder_hash
       .mockResolvedValueOnce(['pandas', 'requests'])      // read_folder_requirements (has deps)
-      .mockResolvedValueOnce(undefined)                            // ensure_script_venv
-      .mockResolvedValueOnce(undefined)                            // sync_script_deps
+      .mockResolvedValueOnce(undefined)                    // ensure_script_venv
+      .mockResolvedValueOnce(undefined)                    // sync_script_deps
       .mockResolvedValueOnce('C:/AppData/venvs/a1b2/Scripts/python.exe')  // get_venv_python_path
       .mockResolvedValueOnce('C:/AppData/logs')            // get_log_directory
 
     await new TauriTaskScheduler().create(task(), script)
 
-    // Verify sync_script_deps was called
-    expect(mockedInvoke).toHaveBeenNthCalledWith(4, 'sync_script_deps', {
-      folderHash: 'a1b2c3d4e5f67890',
+    // Verify sync_script_deps was called with dirPath
+    expect(mockedInvoke).toHaveBeenNthCalledWith(3, 'sync_script_deps', {
+      dirPath: 'C:/scripts',
       requirements: ['pandas', 'requests'],
     })
-    expect(mockedInvoke).toHaveBeenNthCalledWith(7, 'create_scheduled_task', expect.anything())
+    expect(mockedInvoke).toHaveBeenNthCalledWith(6, 'create_scheduled_task', expect.anything())
   })
 
   it('derives the working directory from a backslash script path', async () => {
     mockedInvoke
-      .mockResolvedValueOnce('a1b2c3d4e5f67890')        // compute_folder_hash
       .mockResolvedValueOnce([])                          // read_folder_requirements
-      .mockResolvedValueOnce(undefined)                            // ensure_script_venv
+      .mockResolvedValueOnce(undefined)                   // ensure_script_venv
       .mockResolvedValueOnce('C:/AppData/venvs/a1b2/Scripts/python.exe')  // get_venv_python_path
       .mockResolvedValueOnce('C:/AppData/logs')            // get_log_directory
 
@@ -98,8 +94,10 @@ describe('TauriTaskScheduler', () => {
 
     await new TauriTaskScheduler().create(task(), backslashScript)
 
-    expect(mockedInvoke).toHaveBeenNthCalledWith(1, 'compute_folder_hash', { dirPath: 'C:/scripts/sub' })
-    expect(mockedInvoke).toHaveBeenNthCalledWith(6, 'create_scheduled_task', expect.objectContaining({
+    expect(mockedInvoke).toHaveBeenNthCalledWith(1, 'read_folder_requirements', { dirPath: 'C:/scripts/sub' })
+    expect(mockedInvoke).toHaveBeenNthCalledWith(2, 'ensure_script_venv', { dirPath: 'C:/scripts/sub', pythonVersion: '3.11' })
+    expect(mockedInvoke).toHaveBeenNthCalledWith(3, 'get_venv_python_path', { dirPath: 'C:/scripts/sub' })
+    expect(mockedInvoke).toHaveBeenNthCalledWith(5, 'create_scheduled_task', expect.objectContaining({
       workingDirectory: 'C:/scripts/sub',
     }))
   })
@@ -107,9 +105,8 @@ describe('TauriTaskScheduler', () => {
   it('maps once, weekly, and interval schedules to payloads', async () => {
     const baseMocks = () => {
       mockedInvoke
-        .mockResolvedValueOnce('a1b2c3d4e5f67890')             // compute_folder_hash
         .mockResolvedValueOnce([])                              // read_folder_requirements
-        .mockResolvedValueOnce(undefined)                                // ensure_script_venv
+        .mockResolvedValueOnce(undefined)                       // ensure_script_venv
         .mockResolvedValueOnce('C:/AppData/venvs/a1b2/Scripts/python.exe')  // get_venv_python_path
         .mockResolvedValueOnce('C:/AppData/logs')                // get_log_directory
     }

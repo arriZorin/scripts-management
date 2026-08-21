@@ -63,6 +63,10 @@ fn scan_files(folder: String) -> Result<Vec<String>, String> {
                 let full_path = path.to_string_lossy().to_string();
                 files.push(full_path.replace('\\', "/"));
             } else if path.is_dir() {
+                // Skip virtual environments — their contents are not scripts.
+                if entry.file_name().to_string_lossy() == ".venv" {
+                    continue;
+                }
                 walk_dir(&path, files)?;
             }
         }
@@ -324,22 +328,14 @@ fn get_task_run_result(
 }
 
 #[tauri::command]
-fn compute_folder_hash(dir_path: String) -> Result<String, String> {
-    if dir_path.is_empty() {
-        return Err("path cannot be empty".to_string());
-    }
-    Ok(venv::folder_hash(&dir_path))
-}
-
-#[tauri::command]
 fn get_venv_python_path(
-    state: tauri::State<'_, AppDataDir>,
-    folder_hash: String,
+    dir_path: String,
 ) -> Result<String, String> {
-    if folder_hash.len() != 16 {
-        return Err("invalid folder hash".to_string());
+    let dir = std::path::Path::new(&dir_path);
+    if !dir.is_dir() {
+        return Err(format!("directory not found: {}", dir_path));
     }
-    Ok(venv::venv_python_path(&state.0, &folder_hash)
+    Ok(venv::venv_python_path(dir)
         .to_string_lossy()
         .to_string())
 }
@@ -347,41 +343,44 @@ fn get_venv_python_path(
 #[tauri::command]
 fn ensure_script_venv(
     state: tauri::State<'_, AppDataDir>,
-    folder_hash: String,
+    dir_path: String,
     python_version: String,
 ) -> Result<String, String> {
-    if folder_hash.len() != 16 {
-        return Err("invalid folder hash".to_string());
+    let dir = std::path::Path::new(&dir_path);
+    if !dir.is_dir() {
+        return Err(format!("directory not found: {}", dir_path));
     }
     if python_version.is_empty() {
         return Err("python_version cannot be empty".to_string());
     }
     // Call into the module; pass None for uv_path so it uses PATH-discovered uv.exe.
     // The caller (venv bootstrap) ensures uv is available before this runs.
-    venv::ensure_venv(&state.0, &folder_hash, &python_version, None)
+    venv::ensure_venv(&state.0, dir, &python_version, None)
 }
 
 #[tauri::command]
 fn sync_script_deps(
     state: tauri::State<'_, AppDataDir>,
-    folder_hash: String,
+    dir_path: String,
     requirements: Vec<String>,
 ) -> Result<(), String> {
-    if folder_hash.len() != 16 {
-        return Err("invalid folder hash".to_string());
+    let dir = std::path::Path::new(&dir_path);
+    if !dir.is_dir() {
+        return Err(format!("directory not found: {}", dir_path));
     }
-    venv::sync_deps(&state.0, &folder_hash, &requirements, None)
+    venv::sync_deps(&state.0, dir, &requirements, None)
 }
 
 #[tauri::command]
 fn delete_script_venv(
     state: tauri::State<'_, AppDataDir>,
-    folder_hash: String,
+    dir_path: String,
 ) -> Result<(), String> {
-    if folder_hash.len() != 16 {
-        return Err("invalid folder hash".to_string());
+    let dir = std::path::Path::new(&dir_path);
+    if !dir.is_dir() {
+        return Err(format!("directory not found: {}", dir_path));
     }
-    venv::delete_venv(&state.0, &folder_hash)
+    venv::delete_venv(&state.0, dir)
 }
 
 #[tauri::command]
@@ -443,7 +442,6 @@ pub fn run() {
             get_task_run_result,
             get_log_directory,
             get_app_mode,
-            compute_folder_hash,
             get_venv_python_path,
             ensure_script_venv,
             sync_script_deps,

@@ -13,20 +13,19 @@ export interface TaskScheduler {
 export class TauriTaskScheduler implements TaskScheduler {
   async create(task: Task, script: Script): Promise<void> {
     const workingDir = scriptDir(script.path)
-    const folderHash = await invoke<string>('compute_folder_hash', { dirPath: workingDir })
 
     // Read requirements.txt from script folder (or empty if not found)
     const requirements = await invoke<string[]>('read_folder_requirements', { dirPath: workingDir })
 
-    // Ensure venv exists and deps are synced (idempotent — hash cache skips if unchanged)
+    // Ensure venv exists in the script folder and deps are synced (idempotent — hash cache skips if unchanged)
     const pythonVersion = script.pythonVersion ?? '3.11'
-    await invoke('ensure_script_venv', { folderHash, pythonVersion })
+    await invoke('ensure_script_venv', { dirPath: workingDir, pythonVersion })
     if (requirements.length > 0) {
-      await invoke('sync_script_deps', { folderHash, requirements })
+      await invoke('sync_script_deps', { dirPath: workingDir, requirements })
     }
 
     // Get the venv's python.exe path
-    const venvPythonPath = await invoke<string>('get_venv_python_path', { folderHash })
+    const venvPythonPath = await invoke<string>('get_venv_python_path', { dirPath: workingDir })
 
     const logDirectory = await invoke<string>('get_log_directory')
     await invoke('create_scheduled_task', {

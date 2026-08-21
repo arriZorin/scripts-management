@@ -14,23 +14,21 @@ export class TauriVenvSync implements VenvSync {
 
   async syncFolder(scriptPath: string, pythonVersion: string): Promise<void> {
     const workingDir = scriptDir(scriptPath)
-    const folderHash = await invoke<string>('compute_folder_hash', { dirPath: workingDir })
 
     // Read requirements.txt from the script folder (or empty if not found)
     const requirements = await invoke<string[]>('read_folder_requirements', { dirPath: workingDir })
 
-    // Ensure venv exists (health check first — 0 subprocess if healthy)
-    await invoke('ensure_script_venv', { folderHash, pythonVersion })
+    // Ensure venv exists in the script folder (health check first — 0 subprocess if healthy)
+    await invoke('ensure_script_venv', { dirPath: workingDir, pythonVersion })
 
     // Sync deps if there are any requirements
     if (requirements.length > 0) {
-      await invoke('sync_script_deps', { folderHash, requirements })
+      await invoke('sync_script_deps', { dirPath: workingDir, requirements })
     }
   }
 
   async cleanupFolder(scriptPath: string): Promise<void> {
     const workingDir = scriptDir(scriptPath)
-    const folderHash = await invoke<string>('compute_folder_hash', { dirPath: workingDir })
 
     // Check if any scripts remain in this folder
     const allScripts = await this.scriptRepository.list()
@@ -40,12 +38,12 @@ export class TauriVenvSync implements VenvSync {
 
     if (remaining.length === 0) {
       // No scripts left in this folder — delete the venv
-      await invoke('delete_script_venv', { folderHash })
+      await invoke('delete_script_venv', { dirPath: workingDir })
     } else {
       // Re-sync with remaining scripts' requirements.txt
       const requirements = await invoke<string[]>('read_folder_requirements', { dirPath: workingDir })
       if (requirements.length > 0) {
-        await invoke('sync_script_deps', { folderHash, requirements })
+        await invoke('sync_script_deps', { dirPath: workingDir, requirements })
       }
     }
   }
