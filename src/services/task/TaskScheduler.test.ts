@@ -135,7 +135,6 @@ describe('TauriTaskScheduler', () => {
     // Mock for the create call inside update
     mockedInvoke
       .mockResolvedValueOnce(undefined)                            // delete_scheduled_task (success)
-      .mockResolvedValueOnce('a1b2c3d4e5f67890')          // compute_folder_hash
       .mockResolvedValueOnce([])                           // read_folder_requirements
       .mockResolvedValueOnce(undefined)                             // ensure_script_venv
       .mockResolvedValueOnce('C:/AppData/venvs/a1b2/Scripts/python.exe')  // get_venv_python_path
@@ -166,7 +165,6 @@ describe('TauriTaskScheduler', () => {
 
   it('propagates venv creation failures', async () => {
     mockedInvoke
-      .mockResolvedValueOnce('a1b2c3d4e5f67890')        // compute_folder_hash
       .mockResolvedValueOnce([])                          // read_folder_requirements
       .mockRejectedValueOnce('uv venv failed: version mismatch') // ensure_script_venv fails
 
