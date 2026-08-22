@@ -14,7 +14,7 @@ export function createRuntimeRequirement(): RuntimeRequirement {
   const downloader = new TauriFileDownloader()
   const environmentQuery = new TauriEnvironmentQuery()
   return new PythonRuntimeCheck(
-    new UvBootstrapper(processRunner, downloader),
+    new UvBootstrapper(processRunner, downloader, environmentQuery),
     environmentQuery,
     null, // uvInstallDir resolved from %LOCALAPPDATA% at runtime
   )
