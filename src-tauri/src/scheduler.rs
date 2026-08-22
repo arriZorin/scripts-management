@@ -292,7 +292,7 @@ mod tests {
     #[test]
     fn builds_create_command_with_absolute_paths_and_separate_arguments() {
         let command = build_create_command(CreateScheduledTask {
-            task_name: "ScriptsManagement\\task-1".to_string(),
+            task_name: "PyscriptScheduler\\task-1".to_string(),
             venv_python_path: "C:\\Python312\\python.exe".to_string(),
             script_path: "C:\\Scripts\\backup.py".to_string(),
             arguments: vec!["--output".to_string(), "C:\\Backup Folder".to_string()],
@@ -310,7 +310,7 @@ mod tests {
             .any(|pair| pair == ["/Create", "/TN"]));
         assert!(command
             .args
-            .contains(&"ScriptsManagement\\task-1".to_string()));
+            .contains(&"PyscriptScheduler\\task-1".to_string()));
         let task_command = command.args.get(4).unwrap();
         assert!(task_command.contains("C:\\Python312\\python.exe"));
         assert!(task_command.contains("C:\\Scripts\\backup.py"));
@@ -320,7 +320,7 @@ mod tests {
     #[test]
     fn rejects_relative_paths() {
         let result = build_create_command(CreateScheduledTask {
-            task_name: "ScriptsManagement\\task-1".to_string(),
+            task_name: "PyscriptScheduler\\task-1".to_string(),
             venv_python_path: "python".to_string(),
             script_path: "scripts\\backup.py".to_string(),
             arguments: vec![],
@@ -354,7 +354,7 @@ mod tests {
     #[test]
     fn create_command_runs_as_current_user() {
         let command = build_create_command(CreateScheduledTask {
-            task_name: "ScriptsManagement\\task-1".to_string(),
+            task_name: "PyscriptScheduler\\task-1".to_string(),
             venv_python_path: "C:\\Python312\\python.exe".to_string(),
             script_path: "C:\\Scripts\\backup.py".to_string(),
             arguments: vec![],
@@ -377,33 +377,33 @@ mod tests {
         // schtasks has NO standalone /Enable|/Disable option; enable/disable
         // are /ENABLE|/DISABLE flags of /Change (verified: standalone
         // /Disable fails with "Invalid argument/option").
-        let enabled = build_set_enabled_command("ScriptsManagement\\task-1", true).unwrap();
+        let enabled = build_set_enabled_command("PyscriptScheduler\\task-1", true).unwrap();
         assert_eq!(
             enabled.args,
-            vec!["/Change", "/TN", "ScriptsManagement\\task-1", "/ENABLE"]
+            vec!["/Change", "/TN", "PyscriptScheduler\\task-1", "/ENABLE"]
         );
-        let disabled = build_set_enabled_command("ScriptsManagement\\task-1", false).unwrap();
+        let disabled = build_set_enabled_command("PyscriptScheduler\\task-1", false).unwrap();
         assert_eq!(
             disabled.args,
-            vec!["/Change", "/TN", "ScriptsManagement\\task-1", "/DISABLE"]
+            vec!["/Change", "/TN", "PyscriptScheduler\\task-1", "/DISABLE"]
         );
     }
 
     #[test]
     fn builds_lifecycle_commands() {
-        assert!(build_update_command("ScriptsManagement\\task-1", &[])
+        assert!(build_update_command("PyscriptScheduler\\task-1", &[])
             .unwrap()
             .args
             .contains(&"/Change".to_string()));
-        assert!(build_run_command("ScriptsManagement\\task-1")
+        assert!(build_run_command("PyscriptScheduler\\task-1")
             .unwrap()
             .args
             .contains(&"/Run".to_string()));
-        assert!(build_delete_command("ScriptsManagement\\task-1")
+        assert!(build_delete_command("PyscriptScheduler\\task-1")
             .unwrap()
             .args
             .contains(&"/Delete".to_string()));
-        assert!(build_status_command("ScriptsManagement\\task-1")
+        assert!(build_status_command("PyscriptScheduler\\task-1")
             .unwrap()
             .args
             .contains(&"/Query".to_string()));

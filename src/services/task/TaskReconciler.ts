@@ -21,7 +21,7 @@ export function reconcileTasks(tasks: Task[], registeredNames: string[]): Reconc
   const missing = tasks.filter(task => !registered.has(taskWindowsName(task.id)))
   const known = new Set(tasks.map(task => taskWindowsName(task.id)))
   const orphaned = registeredNames
-    .filter(name => name.startsWith('ScriptsManagement\\'))
+    .filter(name => name.startsWith('PyscriptScheduler\\'))
     .filter(name => !known.has(name))
   return { missing, orphaned }
 }

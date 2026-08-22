@@ -82,7 +82,7 @@ MVP schedule rules:
 ### Windows task naming convention
 
 ```text
-ScriptsManagement\\<task-id>
+pyscriptscheduler\\<task-id>
 ```
 
 The task ID is the stable identifier used to create, update, query, enable/disable, run, and delete the corresponding Windows Scheduled Task. User-provided names are display-only and are not used as command identifiers.
@@ -215,7 +215,7 @@ Implementation notes:
 Implementation notes:
 
 - `TaskExecutor` separates frontend behavior from Tauri invocation.
-- `TauriTaskExecutor` invokes `run_scheduled_task` with the stable `ScriptsManagement\\<task-id>` name.
+- `TauriTaskExecutor` invokes `run_scheduled_task` with the stable `pyscriptscheduler\\<task-id>` name.
 - The UI tracks the active task, displays result/error feedback, and reloads tasks after execution.
 - `TaskScheduler`/`TauriTaskScheduler` sync the full task lifecycle to Windows Task Scheduler: create registers via `create_scheduled_task`, edit re-creates, toggle calls `set_scheduled_task_enabled`, delete removes the registered task.
 - `resolve_interpreter_path` resolves a relative interpreter (e.g. `python`) to an absolute path via `where.exe`; `get_log_directory` returns the app-local `logs` folder.
@@ -241,7 +241,7 @@ Implementation notes:
 - [x] Add clear-history action
 - [x] Add repository tests
 
-**Acceptance:** Each execution produces a visible history record and readable logs. ✅ Verified 2026-08-14 on the release exe: a task created in the UI registered with a `cmd /c` action that redirects stdout/stderr into per-task log files; Run Now triggered real execution (Task Scheduler Last Result 0) and produced `ScriptsManagement-<id>.out.log` (`phase6-e2e stdout marker`) and `.err.log` (`phase6-e2e stderr warning`); `task-runs.json` records every run (startedAt/finishedAt/status/exitCode/stdout/stderr) and the Task page shows the history panel with All/Success/Failed filters, status badges, exit codes, output, and a Clear History confirm modal.
+**Acceptance:** Each execution produces a visible history record and readable logs. ✅ Verified 2026-08-14 on the release exe: a task created in the UI registered with a `cmd /c` action that redirects stdout/stderr into per-task log files; Run Now triggered real execution (Task Scheduler Last Result 0) and produced `pyscriptscheduler-<id>.out.log` (`phase6-e2e stdout marker`) and `.err.log` (`phase6-e2e stderr warning`); `task-runs.json` records every run (startedAt/finishedAt/status/exitCode/stdout/stderr) and the Task page shows the history panel with All/Success/Failed filters, status badges, exit codes, output, and a Clear History confirm modal.
 
 Implementation notes:
 

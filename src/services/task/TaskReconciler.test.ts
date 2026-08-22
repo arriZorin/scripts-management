@@ -38,21 +38,21 @@ describe('reconcileTasks', () => {
       task({ id: 'task-b', name: 'Missing' }),
     ]
     const registered = [
-      'ScriptsManagement\\task-a',
-      'ScriptsManagement\\task-orphan',
+      'PyscriptScheduler\\task-a',
+      'PyscriptScheduler\\task-orphan',
       'Other\\unrelated',
     ]
 
     const result = reconcileTasks(tasks, registered)
 
     expect(result.missing.map(t => t.id)).toEqual(['task-b'])
-    expect(result.orphaned).toEqual(['ScriptsManagement\\task-orphan'])
+    expect(result.orphaned).toEqual(['PyscriptScheduler\\task-orphan'])
   })
 
   it('returns empty sets when fully in sync', () => {
     const result = reconcileTasks(
       [task({ id: 'task-a' })],
-      ['ScriptsManagement\\task-a'],
+      ['PyscriptScheduler\\task-a'],
     )
     expect(result.missing).toEqual([])
     expect(result.orphaned).toEqual([])
@@ -73,12 +73,12 @@ describe('removeOrphanedRegistrations', () => {
     const deletes: string[] = []
 
     const removed = await removeOrphanedRegistrations(
-      ['ScriptsManagement\\task-orphan', 'ScriptsManagement\\ghost'],
+      ['PyscriptScheduler\\task-orphan', 'PyscriptScheduler\\ghost'],
       schedulerWithDeletes(deletes),
     )
 
     expect(deletes).toEqual(['task-orphan', 'ghost'])
-    expect(removed).toEqual(['ScriptsManagement\\task-orphan', 'ScriptsManagement\\ghost'])
+    expect(removed).toEqual(['PyscriptScheduler\\task-orphan', 'PyscriptScheduler\\ghost'])
   })
 
   it('skips registrations outside the app namespace', async () => {
@@ -109,7 +109,7 @@ describe('repairMissingTasks', () => {
         task({ id: 'task-a', name: 'Registered' }),
         task({ id: 'task-b', name: 'Missing' }),
       ],
-      ['ScriptsManagement\\task-a'],
+      ['PyscriptScheduler\\task-a'],
       [script],
       scheduler,
     )

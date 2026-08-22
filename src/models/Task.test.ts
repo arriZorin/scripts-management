@@ -5,7 +5,7 @@ import { isValidDateTime, isValidSchedule, taskIdFromWindowsName, taskWindowsNam
 describe('Windows task name helpers', () => {
   it('round-trips a task id through taskWindowsName and back', () => {
     const name = taskWindowsName('task-1')
-    expect(name).toBe('ScriptsManagement\\task-1')
+    expect(name).toBe('PyscriptScheduler\\task-1')
     expect(taskIdFromWindowsName(name)).toBe('task-1')
   })
 

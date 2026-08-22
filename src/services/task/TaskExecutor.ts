@@ -7,6 +7,6 @@ export interface TaskExecutor {
 
 export class TauriTaskExecutor implements TaskExecutor {
   run(task: Task): Promise<string> {
-    return invoke<string>('run_scheduled_task', { taskName: `ScriptsManagement\\${task.id}` })
+    return invoke<string>('run_scheduled_task', { taskName: `PyscriptScheduler\\${task.id}` })
   }
 }

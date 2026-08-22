@@ -102,7 +102,7 @@ export function taskInputFromTask(task: Task): TaskInput {
   return input
 }
 
-export const TASK_WINDOWS_NAMESPACE = 'ScriptsManagement\\'
+export const TASK_WINDOWS_NAMESPACE = 'PyscriptScheduler\\'
 
 export function taskWindowsName(id: string): string {
   return `${TASK_WINDOWS_NAMESPACE}${id}`

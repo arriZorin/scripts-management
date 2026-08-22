@@ -67,8 +67,8 @@ describe('TaskRunRecorder', () => {
       .mockResolvedValueOnce({
         last_run_at: 1786665600,
         last_result: 0,
-        stdout_log: 'logs\\ScriptsManagement-task-1.out.log',
-        stderr_log: 'logs\\ScriptsManagement-task-1.err.log',
+        stdout_log: 'logs\\PyscriptScheduler-task-1.out.log',
+        stderr_log: 'logs\\PyscriptScheduler-task-1.err.log',
       })
       .mockResolvedValueOnce('hello output')
       .mockResolvedValueOnce('')
@@ -82,9 +82,9 @@ describe('TaskRunRecorder', () => {
     expect(run.finishedAt).toBe('2026-08-14T00:00:00.000Z')
     expect(run.stdout).toBe('hello output')
     expect(run.stderr).toBe('')
-    expect(mockedInvoke).toHaveBeenCalledWith('get_scheduled_task_status', { taskName: 'ScriptsManagement\\task-1' })
-    expect(mockedInvoke).toHaveBeenCalledWith('get_task_run_result', { taskName: 'ScriptsManagement\\task-1' })
-    expect(mockedInvoke).toHaveBeenCalledWith('read_text_file', { path: 'logs\\ScriptsManagement-task-1.out.log' })
+    expect(mockedInvoke).toHaveBeenCalledWith('get_scheduled_task_status', { taskName: 'PyscriptScheduler\\task-1' })
+    expect(mockedInvoke).toHaveBeenCalledWith('get_task_run_result', { taskName: 'PyscriptScheduler\\task-1' })
+    expect(mockedInvoke).toHaveBeenCalledWith('read_text_file', { path: 'logs\\PyscriptScheduler-task-1.out.log' })
   })
 
   it('marks a non-zero exit code as failed', async () => {
@@ -95,8 +95,8 @@ describe('TaskRunRecorder', () => {
       .mockResolvedValueOnce({
         last_run_at: 1786665600,
         last_result: 2,
-        stdout_log: 'logs\\ScriptsManagement-task-1.out.log',
-        stderr_log: 'logs\\ScriptsManagement-task-1.err.log',
+        stdout_log: 'logs\\PyscriptScheduler-task-1.out.log',
+        stderr_log: 'logs\\PyscriptScheduler-task-1.err.log',
       })
       .mockResolvedValueOnce('partial')
       .mockResolvedValueOnce('boom')

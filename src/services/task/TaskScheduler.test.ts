@@ -55,7 +55,7 @@ describe('TauriTaskScheduler', () => {
     expect(mockedInvoke).toHaveBeenNthCalledWith(2, 'ensure_script_venv', { dirPath: 'C:/scripts', pythonVersion: '3.11' })
     expect(mockedInvoke).toHaveBeenNthCalledWith(3, 'get_venv_python_path', { dirPath: 'C:/scripts' })
     expect(mockedInvoke).toHaveBeenNthCalledWith(5, 'create_scheduled_task', {
-      taskName: 'ScriptsManagement\\task-1',
+      taskName: 'PyscriptScheduler\\task-1',
       venvPythonPath: 'C:/AppData/venvs/a1b2/Scripts/python.exe',
       scriptPath: 'C:/scripts/backup.py',
       arguments: ['--format', 'json'],
@@ -142,7 +142,7 @@ describe('TauriTaskScheduler', () => {
 
     await new TauriTaskScheduler().update(task(), script)
 
-    expect(mockedInvoke.mock.calls[0]).toEqual(['delete_scheduled_task', { taskName: 'ScriptsManagement\\task-1' }])
+    expect(mockedInvoke.mock.calls[0]).toEqual(['delete_scheduled_task', { taskName: 'PyscriptScheduler\\task-1' }])
     // Last call should be create_scheduled_task
     const lastCall = mockedInvoke.mock.calls[mockedInvoke.mock.calls.length - 1]
     expect(lastCall[0]).toBe('create_scheduled_task')
@@ -158,7 +158,7 @@ describe('TauriTaskScheduler', () => {
     await new TauriTaskScheduler().setEnabled('task-1', false)
 
     expect(mockedInvoke).toHaveBeenCalledWith('set_scheduled_task_enabled', {
-      taskName: 'ScriptsManagement\\task-1',
+      taskName: 'PyscriptScheduler\\task-1',
       enabled: false,
     })
   })

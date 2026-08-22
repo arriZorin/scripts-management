@@ -179,7 +179,7 @@ beforeEach(() => {
   mockedInvoke.mockImplementation((command: string) => {
     // FakeTaskRepository gives every created task the id 'task-1', so treat
     // it as registered by default; missing-task scenarios override below.
-    if (command === 'list_scheduled_tasks') return Promise.resolve(['ScriptsManagement\\task-1'])
+    if (command === 'list_scheduled_tasks') return Promise.resolve(['PyscriptScheduler\\task-1'])
     // Unknown commands reject like the unmocked Tauri bridge, so
     // TaskRunRecorder.finalizePending fail-closes and keeps runs 'running'.
     return Promise.reject(`unmocked command: ${command}`)
@@ -910,9 +910,9 @@ it('shows a reconcile banner when tasks are missing or orphaned', async () => {
   await repository.create({ name: 'Registered', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', startAt: '2026-08-14T08:00:00' }, enabled: true })
   await repository.create({ name: 'Missing', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', startAt: '2026-08-14T08:00:00' }, enabled: true })
   // FakeTaskRepository gives every created task id 'task-1', so the
-  // 'ScriptsManagement\task-1' registration matches BOTH → 0 missing, 1 orphan.
+  // 'PyscriptScheduler\task-1' registration matches BOTH → 0 missing, 1 orphan.
   mockedInvoke.mockImplementation((command: string) => {
-    if (command === 'list_scheduled_tasks') return Promise.resolve(['ScriptsManagement\\task-1', 'ScriptsManagement\\task-orphan'])
+    if (command === 'list_scheduled_tasks') return Promise.resolve(['PyscriptScheduler\\task-1', 'PyscriptScheduler\\task-orphan'])
     return Promise.reject(`unmocked command: ${command}`)
   })
   const { container, app } = mountView(repository)
@@ -929,7 +929,7 @@ it('cleans orphaned registrations with the Clean Orphans button', async () => {
   await repository.create({ name: 'Registered', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', startAt: '2026-08-14T08:00:00' }, enabled: true })
   // Stateful registration list: delete_scheduled_task removes the name, so a
   // reload after cleaning sees the orphan gone and the banner clears.
-  const registered = ['ScriptsManagement\\task-1', 'ScriptsManagement\\task-orphan']
+  const registered = ['PyscriptScheduler\\task-1', 'PyscriptScheduler\\task-orphan']
   mockedInvoke.mockImplementation((command: string) => {
     if (command === 'list_scheduled_tasks') return Promise.resolve([...registered])
     return Promise.reject(`unmocked command: ${command}`)
@@ -938,7 +938,7 @@ it('cleans orphaned registrations with the Clean Orphans button', async () => {
   const originalDelete = scheduler.delete.bind(scheduler)
   scheduler.delete = async (taskId: string) => {
     await originalDelete(taskId)
-    registered.splice(registered.indexOf(`ScriptsManagement\\${taskId}`), 1)
+    registered.splice(registered.indexOf(`PyscriptScheduler\\${taskId}`), 1)
   }
   const { container, app } = mountView(repository, new FakeTaskExecutor(), scheduler)
   await flush()
@@ -969,7 +969,7 @@ it('repairs missing tasks by re-registering them', async () => {
   const originalCreate = scheduler.create.bind(scheduler)
   scheduler.create = async (task: Task) => {
     await originalCreate(task)
-    registered.push(`ScriptsManagement\\${task.id}`)
+    registered.push(`PyscriptScheduler\\${task.id}`)
   }
   const { container, app } = mountView(repository, new FakeTaskExecutor(), scheduler)
   await flush()
@@ -1001,7 +1001,7 @@ it('shows a per-row Repair action only for tasks missing from the scheduler', as
   repository.items.push(task({ id: 'task-a', name: 'Registered' }))
   repository.items.push(task({ id: 'task-b', name: 'Missing' }))
   mockedInvoke.mockImplementation((command: string) => {
-    if (command === 'list_scheduled_tasks') return Promise.resolve(['ScriptsManagement\\task-a'])
+    if (command === 'list_scheduled_tasks') return Promise.resolve(['PyscriptScheduler\\task-a'])
     return Promise.reject(`unmocked command: ${command}`)
   })
   const { container, app } = mountView(repository)
@@ -1045,7 +1045,7 @@ it('repairs a single missing task from its row', async () => {
   const originalCreate = scheduler.create.bind(scheduler)
   scheduler.create = async (created: Task) => {
     await originalCreate(created)
-    registered.push(`ScriptsManagement\\${created.id}`)
+    registered.push(`PyscriptScheduler\\${created.id}`)
   }
   const { container, app } = mountView(repository, new FakeTaskExecutor(), scheduler)
   await flush()
@@ -1068,7 +1068,7 @@ it('shows script missing as the single status when the script is unresolvable', 
   const repository = new FakeTaskRepository()
   repository.items.push(task({ id: 'task-b', name: 'Broken', scriptId: 'gone' }))
   mockedInvoke.mockImplementation((command: string) => {
-    if (command === 'list_scheduled_tasks') return Promise.resolve(['ScriptsManagement\\task-b'])
+    if (command === 'list_scheduled_tasks') return Promise.resolve(['PyscriptScheduler\\task-b'])
     return Promise.reject(`unmocked command: ${command}`)
   })
   const { container, app } = mountView(repository)
@@ -1088,7 +1088,7 @@ it('limits actions to edit, disable, and delete when the script is missing but r
   const repository = new FakeTaskRepository()
   repository.items.push(task({ id: 'task-b', name: 'Broken', scriptId: 'gone' }))
   mockedInvoke.mockImplementation((command: string) => {
-    if (command === 'list_scheduled_tasks') return Promise.resolve(['ScriptsManagement\\task-b'])
+    if (command === 'list_scheduled_tasks') return Promise.resolve(['PyscriptScheduler\\task-b'])
     return Promise.reject(`unmocked command: ${command}`)
   })
   const { container, app } = mountView(repository)
@@ -1107,7 +1107,7 @@ it('hides disable when a script-missing task is already disabled', async () => {
   const repository = new FakeTaskRepository()
   repository.items.push(task({ id: 'task-b', name: 'Broken', scriptId: 'gone', enabled: false }))
   mockedInvoke.mockImplementation((command: string) => {
-    if (command === 'list_scheduled_tasks') return Promise.resolve(['ScriptsManagement\\task-b'])
+    if (command === 'list_scheduled_tasks') return Promise.resolve(['PyscriptScheduler\\task-b'])
     return Promise.reject(`unmocked command: ${command}`)
   })
   const { container, app } = mountView(repository)
@@ -1139,7 +1139,7 @@ it('disables a script-missing registered task from its row', async () => {
   const repository = new FakeTaskRepository()
   repository.items.push(task({ id: 'task-b', name: 'Broken', scriptId: 'gone' }))
   mockedInvoke.mockImplementation((command: string) => {
-    if (command === 'list_scheduled_tasks') return Promise.resolve(['ScriptsManagement\\task-b'])
+    if (command === 'list_scheduled_tasks') return Promise.resolve(['PyscriptScheduler\\task-b'])
     return Promise.reject(`unmocked command: ${command}`)
   })
   const scheduler = new FakeTaskScheduler()
@@ -1188,7 +1188,7 @@ it('removes broken tasks through the banner confirm dialog', async () => {
   repository.items.push(task({ id: 'task-a', name: 'Healthy', scriptId: script.id }))
   repository.items.push(task({ id: 'task-b', name: 'Broken', scriptId: 'gone' }))
   mockedInvoke.mockImplementation((command: string) => {
-    if (command === 'list_scheduled_tasks') return Promise.resolve(['ScriptsManagement\\task-a'])
+    if (command === 'list_scheduled_tasks') return Promise.resolve(['PyscriptScheduler\\task-a'])
     return Promise.reject(`unmocked command: ${command}`)
   })
   const scheduler = new FakeTaskScheduler()
@@ -1230,7 +1230,7 @@ it('flags tasks whose script file is missing on disk as script missing', async (
   const repository = new FakeTaskRepository()
   repository.items.push(task({ id: 'task-b', name: 'Broken', scriptId: script.id }))
   mockedInvoke.mockImplementation((command: string) => {
-    if (command === 'list_scheduled_tasks') return Promise.resolve(['ScriptsManagement\\task-b'])
+    if (command === 'list_scheduled_tasks') return Promise.resolve(['PyscriptScheduler\\task-b'])
     return Promise.reject(`unmocked command: ${command}`)
   })
   const pathChecker = { exists: async (path: string) => path !== script.path }

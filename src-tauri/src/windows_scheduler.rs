@@ -49,7 +49,7 @@ pub struct CreateTaskSpec {
     pub schedule: ScheduleSpec,
 }
 
-/// Maps a task name (e.g. `ScriptsManagement\\<id>`) to a log file stem by
+/// Maps a task name (e.g. `PyscriptScheduler\\<id>`) to a log file stem by
 /// replacing path separators, so the per-task log files are safe filenames.
 pub fn log_file_stem(task_name: &str) -> String {
     task_name.replace('\\', "-").replace('/', "-")
@@ -814,26 +814,26 @@ pub fn run_task(task_name: &str) -> Result<String, String> {
     Ok(format!("started {}", task_name))
 }
 
-/// Keeps only task names under the app's `ScriptsManagement\` namespace.
+/// Keeps only task names under the app's `PyscriptScheduler\` namespace.
 /// COM returns full paths (possibly with a leading `\`), or bare task names
-/// when enumerating the `ScriptsManagement` subfolder directly; both are
-/// normalized to `ScriptsManagement\<name>`. Pure so it is unit-testable.
+/// when enumerating the `PyscriptScheduler` subfolder directly; both are
+/// normalized to `PyscriptScheduler\<name>`. Pure so it is unit-testable.
 pub fn managed_task_names(names: Vec<String>) -> Vec<String> {
     names
         .into_iter()
         .map(|name| name.trim_start_matches('\\').to_string())
         .map(|name| {
-            if name.starts_with("ScriptsManagement\\") {
+            if name.starts_with("PyscriptScheduler\\") {
                 name
             } else if !name.contains('\\') {
-                // Bare name from enumerating the ScriptsManagement subfolder.
-                format!("ScriptsManagement\\{}", name)
+                // Bare name from enumerating the PyscriptScheduler subfolder.
+                format!("PyscriptScheduler\\{}", name)
             } else {
                 // Foreign path (other namespace) — dropped by the filter.
                 name
             }
         })
-        .filter(|name| name.starts_with("ScriptsManagement\\"))
+        .filter(|name| name.starts_with("PyscriptScheduler\\"))
         .collect()
 }
 
@@ -841,9 +841,9 @@ pub fn managed_task_names(names: Vec<String>) -> Vec<String> {
 /// the native Task Scheduler API. Used by the frontend to reconcile JSON
 /// tasks with their Windows registrations.
 ///
-/// Tasks are registered as `ScriptsManagement\<id>`, and Task Scheduler
+/// Tasks are registered as `PyscriptScheduler\<id>`, and Task Scheduler
 /// treats the backslash as a folder separator — they live in the
-/// `ScriptsManagement` subfolder, NOT the root. Enumerating the root
+/// `PyscriptScheduler` subfolder, NOT the root. Enumerating the root
 /// (`GetTasks` on `\`) finds nothing, which made every task look missing.
 /// The subfolder is enumerated instead, and `get_Path` (full path) is read
 /// so names come back namespace-qualified.
@@ -852,7 +852,7 @@ pub fn list_scheduled_tasks() -> Result<Vec<String>, String> {
     let folder = root_folder(&connection)?;
 
     // Open the app's subfolder; a missing folder means no managed tasks.
-    let managed_path = wide("\\ScriptsManagement");
+    let managed_path = wide("\\PyscriptScheduler");
     let mut managed_folder: *mut ITaskFolder = ptr::null_mut();
     let hr = unsafe { (*folder).GetFolder(managed_path.as_ptr() as *mut u16, &mut managed_folder) };
     unsafe { (*folder).Release() };
@@ -1019,14 +1019,14 @@ mod tests {
         assert!(validate_text("", "task_name").is_err());
         assert!(validate_text("task&name", "task_name").is_err());
         assert!(validate_text("task|name", "task_name").is_err());
-        assert!(validate_text("ScriptsManagement\\bill", "task_name").is_ok());
+        assert!(validate_text("PyscriptScheduler\\bill", "task_name").is_ok());
     }
 
     #[test]
     fn log_file_stem_replaces_separators() {
         assert_eq!(
-            log_file_stem("ScriptsManagement\\task-1"),
-            "ScriptsManagement-task-1"
+            log_file_stem("PyscriptScheduler\\task-1"),
+            "PyscriptScheduler-task-1"
         );
         assert_eq!(log_file_stem("task.1"), "task.1");
     }
@@ -1048,7 +1048,7 @@ mod tests {
             "C:\\Scripts\\backup.py",
             &["--output".to_string(), "C:\\Backup Folder".to_string()],
             "C:\\AppData\\logs",
-            "ScriptsManagement\\task-1",
+            "PyscriptScheduler\\task-1",
         )
         .unwrap();
         assert_eq!(path.to_lowercase(), "c:\\windows\\system32\\cmd.exe");
@@ -1057,8 +1057,8 @@ mod tests {
         assert!(args.contains("C:\\Backup Folder"));
         assert!(args.contains("1>"));
         assert!(args.contains("2>"));
-        assert!(args.contains("C:\\AppData\\logs\\ScriptsManagement-task-1.out.log"));
-        assert!(args.contains("C:\\AppData\\logs\\ScriptsManagement-task-1.err.log"));
+        assert!(args.contains("C:\\AppData\\logs\\PyscriptScheduler-task-1.out.log"));
+        assert!(args.contains("C:\\AppData\\logs\\PyscriptScheduler-task-1.err.log"));
         assert!(args.starts_with("/c \"\""));
     }
 
@@ -1069,7 +1069,7 @@ mod tests {
             "C:\\Scripts\\backup.py",
             &["--output".to_string(), "a&b".to_string()],
             "C:\\AppData\\logs",
-            "ScriptsManagement\\task-1",
+            "PyscriptScheduler\\task-1",
         );
         assert!(result.is_err());
     }
@@ -1081,10 +1081,10 @@ mod tests {
         // return relative paths (logs/...), not absolute ones.
         let (stdout_log, stderr_log) = relative_log_paths(
             "C:\\Users\\me\\AppData\\Roaming\\com.tauri-app\\logs",
-            "ScriptsManagement\\task-1",
+            "PyscriptScheduler\\task-1",
         );
-        assert_eq!(stdout_log, "logs\\ScriptsManagement-task-1.out.log");
-        assert_eq!(stderr_log, "logs\\ScriptsManagement-task-1.err.log");
+        assert_eq!(stdout_log, "logs\\PyscriptScheduler-task-1.out.log");
+        assert_eq!(stderr_log, "logs\\PyscriptScheduler-task-1.err.log");
     }
 
     #[test]
@@ -1240,7 +1240,7 @@ mod tests {
     #[test]
     fn create_task_spec_validates_arguments() {
         let spec = CreateTaskSpec {
-            task_name: "ScriptsManagement\\task-1".to_string(),
+            task_name: "PyscriptScheduler\\task-1".to_string(),
             venv_python_path: "C:\\Python312\\python.exe".to_string(),
             script_path: "C:\\Scripts\\backup.py".to_string(),
             arguments: vec!["--output".to_string(), "C:\\Backup Folder".to_string()],
@@ -1264,9 +1264,9 @@ mod tests {
     #[test]
     fn managed_task_names_filters_to_scripts_management_prefix() {
         let names = managed_task_names(vec![
-            "ScriptsManagement\\task-1".to_string(),
-            "ScriptsManagement\\task-2".to_string(),
-            "\\ScriptsManagement\\task-3".to_string(),
+            "PyscriptScheduler\\task-1".to_string(),
+            "PyscriptScheduler\\task-2".to_string(),
+            "\\PyscriptScheduler\\task-3".to_string(),
             "task-4".to_string(),
             "Other\\task".to_string(),
             "Windows\\Update".to_string(),
@@ -1274,12 +1274,12 @@ mod tests {
         assert_eq!(
             names,
             vec![
-                "ScriptsManagement\\task-1".to_string(),
-                "ScriptsManagement\\task-2".to_string(),
-                "ScriptsManagement\\task-3".to_string(),
-                // Bare names come from enumerating the ScriptsManagement
+                "PyscriptScheduler\\task-1".to_string(),
+                "PyscriptScheduler\\task-2".to_string(),
+                "PyscriptScheduler\\task-3".to_string(),
+                // Bare names come from enumerating the PyscriptScheduler
                 // subfolder; they must be normalized into the namespace.
-                "ScriptsManagement\\task-4".to_string(),
+                "PyscriptScheduler\\task-4".to_string(),
             ]
         );
         assert!(managed_task_names(vec![]).is_empty());
@@ -1296,14 +1296,14 @@ mod tests {
     }
 
     /// Real Task Scheduler integration: verifies `list_scheduled_tasks`
-    /// enumerates tasks registered as `ScriptsManagement\<id>` (which live
-    /// in the ScriptsManagement SUBFOLDER, not the root — the bug that made
+    /// enumerates tasks registered as `PyscriptScheduler\<id>` (which live
+    /// in the PyscriptScheduler SUBFOLDER, not the root — the bug that made
     /// every task look missing). Gated `#[ignore]`; run with
     /// `cargo test -- --ignored`.
     #[test]
     #[ignore]
     fn list_scheduled_tasks_finds_tasks_in_managed_subfolder() {
-        let task_name = "ScriptsManagement\\p7-list-probe";
+        let task_name = "PyscriptScheduler\\p7-list-probe";
         let _ = delete_task(task_name); // clean any previous probe
 
         // A minimal Once task registered through the production COM path.
@@ -1340,7 +1340,7 @@ mod tests {
     #[test]
     #[ignore]
     fn battery_task_executes_and_writes_stdout_log() {
-        let task_name = "ScriptsManagement\\p6-battery-probe";
+        let task_name = "PyscriptScheduler\\p6-battery-probe";
         let log_dir = std::env::temp_dir().join("p6-battery-probe-logs");
         std::fs::create_dir_all(&log_dir).unwrap();
         let _ = delete_task(task_name); // clean any previous probe
