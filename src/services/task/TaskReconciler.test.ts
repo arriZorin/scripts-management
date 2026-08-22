@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Script } from '../../models/Script'
 import type { Task } from '../../models/Task'
 import type { TaskScheduler } from './TaskScheduler'
-import { reconcileTasks, repairMissingTasks, repairTask } from './TaskReconciler'
+import { reconcileTasks, removeOrphanedRegistrations, repairMissingTasks, repairTask } from './TaskReconciler'
 
 function task(overrides: Partial<Task> = {}): Task {
   return {
@@ -56,6 +56,41 @@ describe('reconcileTasks', () => {
     )
     expect(result.missing).toEqual([])
     expect(result.orphaned).toEqual([])
+  })
+})
+
+describe('removeOrphanedRegistrations', () => {
+  function schedulerWithDeletes(deletes: string[]): TaskScheduler {
+    return {
+      create: async () => {},
+      update: async () => {},
+      delete: async (taskId: string) => { deletes.push(taskId) },
+      setEnabled: async () => {},
+    }
+  }
+
+  it('deletes each orphaned registration in the app namespace through the scheduler', async () => {
+    const deletes: string[] = []
+
+    const removed = await removeOrphanedRegistrations(
+      ['ScriptsManagement\\task-orphan', 'ScriptsManagement\\ghost'],
+      schedulerWithDeletes(deletes),
+    )
+
+    expect(deletes).toEqual(['task-orphan', 'ghost'])
+    expect(removed).toEqual(['ScriptsManagement\\task-orphan', 'ScriptsManagement\\ghost'])
+  })
+
+  it('skips registrations outside the app namespace', async () => {
+    const deletes: string[] = []
+
+    const removed = await removeOrphanedRegistrations(
+      ['Other\\unrelated'],
+      schedulerWithDeletes(deletes),
+    )
+
+    expect(deletes).toEqual([])
+    expect(removed).toEqual([])
   })
 })
 

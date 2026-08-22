@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import type { Script } from '../../models/Script'
 import type { Task } from '../../models/Task'
-import { taskWindowsName } from '../../models/Task'
+import { taskIdFromWindowsName, taskWindowsName, TASK_WINDOWS_NAMESPACE } from '../../models/Task'
 import type { TaskScheduler } from './TaskScheduler'
 
 export interface ReconcileResult {
@@ -58,4 +58,22 @@ export async function repairMissingTasks(
     if (await repairTask(task, scripts, scheduler)) repaired.push(task.id)
   }
   return repaired
+}
+
+/**
+ * Deletes each orphaned Windows registration (a task name in the app
+ * namespace with no matching JSON task). Names outside the app namespace are
+ * skipped defensively. Returns the removed names.
+ */
+export async function removeOrphanedRegistrations(
+  orphaned: string[],
+  scheduler: TaskScheduler,
+): Promise<string[]> {
+  const removed: string[] = []
+  for (const name of orphaned) {
+    if (!name.startsWith(TASK_WINDOWS_NAMESPACE)) continue
+    await scheduler.delete(taskIdFromWindowsName(name))
+    removed.push(name)
+  }
+  return removed
 }

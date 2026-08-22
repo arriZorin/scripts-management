@@ -102,6 +102,13 @@ export function taskInputFromTask(task: Task): TaskInput {
   return input
 }
 
+export const TASK_WINDOWS_NAMESPACE = 'ScriptsManagement\\'
+
 export function taskWindowsName(id: string): string {
-  return `ScriptsManagement\\${id}`
+  return `${TASK_WINDOWS_NAMESPACE}${id}`
+}
+
+/** Inverse of {@link taskWindowsName}; leaves non-app-namespace names untouched. */
+export function taskIdFromWindowsName(name: string): string {
+  return name.startsWith(TASK_WINDOWS_NAMESPACE) ? name.slice(TASK_WINDOWS_NAMESPACE.length) : name
 }

@@ -8,7 +8,7 @@ import type { Script } from '../models/Script'
 import type { IntervalUnit, Schedule, Task, TaskInput } from '../models/Task'
 import { INTERVAL_UNITS, todayDateString } from '../models/Task'
 import type { TaskRun, TaskRunStatus } from '../models/TaskRun'
-import { listRegisteredTasks, reconcileTasks, repairMissingTasks, repairTask } from '../services/task/TaskReconciler'
+import { listRegisteredTasks, reconcileTasks, removeOrphanedRegistrations, repairMissingTasks, repairTask } from '../services/task/TaskReconciler'
 import type { ReconcileResult } from '../services/task/TaskReconciler'
 import { findMissingScriptIds } from '../services/script/scriptReconciliation'
 import { errorMessage } from '../services/shared/errorMessage'
@@ -41,6 +41,7 @@ const registeredTasks = ref<string[]>([])
 const reconcile = ref<ReconcileResult>({ missing: [], orphaned: [] })
 const repairing = ref(false)
 const repairingTaskId = ref<string | null>(null)
+const cleaningOrphans = ref(false)
 const removeBrokenConfirm = ref(false)
 
 async function loadScripts() {
@@ -113,6 +114,22 @@ async function repairTasks() {
 
 function isTaskMissing(taskId: string): boolean {
   return reconcile.value.missing.some(task => task.id === taskId)
+}
+
+async function cleanOrphans() {
+  if (reconcile.value.orphaned.length === 0) return
+  cleaningOrphans.value = true
+  operationError.value = ''
+  const count = reconcile.value.orphaned.length
+  try {
+    await removeOrphanedRegistrations(reconcile.value.orphaned, taskScheduler)
+    await load()
+    operationResult.value = `Removed ${count} orphaned registration(s).`
+  } catch (cause) {
+    operationError.value = errorText(cause, 'Failed to clean orphaned registrations.')
+  } finally {
+    cleaningOrphans.value = false
+  }
 }
 
 function hasMissingScript(scriptId: string): boolean {
@@ -456,6 +473,7 @@ onMounted(() => {
           <div class="flex gap-2">
             <button v-if="brokenTasks().length > 0" class="btn btn-xs btn-error" data-testid="remove-broken-btn" @click="removeBrokenConfirm = true">Remove Broken</button>
             <button v-if="reconcile.missing.length > 0" class="btn btn-xs btn-warning" :disabled="repairing" data-testid="repair-tasks-btn" @click="repairTasks">{{ repairing ? 'Repairing...' : 'Repair All' }}</button>
+            <button v-if="reconcile.orphaned.length > 0" class="btn btn-xs btn-warning" :disabled="cleaningOrphans" data-testid="clean-orphans-btn" @click="cleanOrphans">{{ cleaningOrphans ? 'Cleaning...' : 'Clean Orphans' }}</button>
           </div>
         </div>
       </div>

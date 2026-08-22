@@ -924,6 +924,37 @@ it('shows a reconcile banner when tasks are missing or orphaned', async () => {
   app.unmount()
 })
 
+it('cleans orphaned registrations with the Clean Orphans button', async () => {
+  const repository = new FakeTaskRepository()
+  await repository.create({ name: 'Registered', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', startAt: '2026-08-14T08:00:00' }, enabled: true })
+  // Stateful registration list: delete_scheduled_task removes the name, so a
+  // reload after cleaning sees the orphan gone and the banner clears.
+  const registered = ['ScriptsManagement\\task-1', 'ScriptsManagement\\task-orphan']
+  mockedInvoke.mockImplementation((command: string) => {
+    if (command === 'list_scheduled_tasks') return Promise.resolve([...registered])
+    return Promise.reject(`unmocked command: ${command}`)
+  })
+  const scheduler = new FakeTaskScheduler()
+  const originalDelete = scheduler.delete.bind(scheduler)
+  scheduler.delete = async (taskId: string) => {
+    await originalDelete(taskId)
+    registered.splice(registered.indexOf(`ScriptsManagement\\${taskId}`), 1)
+  }
+  const { container, app } = mountView(repository, new FakeTaskExecutor(), scheduler)
+  await flush()
+
+  const button = container.querySelector('[data-testid="clean-orphans-btn"]')
+  expect(button).toBeTruthy()
+  expect(button?.textContent).toContain('Clean Orphans')
+  ;(button as HTMLElement).click()
+  await flush()
+
+  expect(scheduler.deletes).toEqual(['task-orphan'])
+  expect(container.querySelector('[data-testid="reconcile-banner"]')).toBeNull()
+  expect(container.querySelector('[data-testid="task-operation-result"]')?.textContent).toContain('Removed 1 orphaned registration(s).')
+  app.unmount()
+})
+
 it('repairs missing tasks by re-registering them', async () => {
   const repository = new FakeTaskRepository()
   await repository.create({ name: 'Missing', scriptId: script.id, interpreter: 'python', arguments: [], schedule: { type: 'daily', startAt: '2026-08-14T08:00:00' }, enabled: true })

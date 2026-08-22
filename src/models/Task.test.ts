@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import type { Schedule } from './Task'
-import { isValidDateTime, isValidSchedule, todayDateString } from './Task'
+import { isValidDateTime, isValidSchedule, taskIdFromWindowsName, taskWindowsName, todayDateString } from './Task'
+
+describe('Windows task name helpers', () => {
+  it('round-trips a task id through taskWindowsName and back', () => {
+    const name = taskWindowsName('task-1')
+    expect(name).toBe('ScriptsManagement\\task-1')
+    expect(taskIdFromWindowsName(name)).toBe('task-1')
+  })
+
+  it('leaves names outside the app namespace unchanged', () => {
+    expect(taskIdFromWindowsName('Other\\unrelated')).toBe('Other\\unrelated')
+  })
+})
 
 describe('Task schedule start datetime', () => {
   it('accepts well-formed YYYY-MM-DDTHH:mm:00 datetimes', () => {
