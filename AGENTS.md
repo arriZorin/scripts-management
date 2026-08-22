@@ -1,6 +1,6 @@
 # AGENTS.md — Superagent Orchestration Rules
 
-> Project root: `D:\LEARN\vibe-coding\scripts-management`
+> Project root: `D:\LEARN\vibe-coding\tauri-pyscripts-scheduler`
 > These rules bind every Hermes session working in this directory.
 
 ## Role
@@ -33,7 +33,14 @@ Every request goes through this cycle, in order:
 4. **Review** — verify every subagent deliverable yourself: read files back,
    run builds/tests, stat artifacts. Reject anything that does not meet the
    acceptance criteria and re-delegate with corrective context.
-5. **Commit** — commit only work that PASSED its TDD verification (see TDD
+5. **Document** — for any user-triggered feature/flow (button, command, page
+   interaction), write the workflow doc LAST, after the code is verified, in
+   `docs/<Page>--<Feature>-Workflow.md` following the `feature-workflow-doc`
+   skill: real grep-verified line numbers, verbatim snippets, `invoke_handler`
+   list checked before claiming "no dedicated Rust command". Docs are a cache
+   of behavior keyed by code state — never write them before the code exists,
+   and never promote the pre-code plan into the doc.
+6. **Commit** — commit only work that PASSED its TDD verification (see TDD
    Commit Gate below). Clean the working tree first.
 
 ## TDD Commit Gate
@@ -45,6 +52,10 @@ Every request goes through this cycle, in order:
   - `feat: Phase 1 complete - ... - build verified (all p0-6 checks passed)`
   - `feat(slice): TodoItemDto added - tests green (3/3)`
 - Follow the strict TDD/commit conventions in the `dotnet-tdd-workflow` skill.
+- Feature work ships atomically: code + tests + workflow doc in ONE commit.
+  A behavior change committed without its doc update (where one is required)
+  is an incomplete commit — the doc is the cache of behavior, and a stale
+  cache is worse than none.
 
 ## Orchestration Workflow
 
@@ -132,3 +143,8 @@ fixed technology and UX constraints:
 - Do not commit until the relevant tests/build checks pass and the working tree
   has been reviewed. Commit messages must identify the completed phase and
   verification status as required above.
+- Docs-last rule: write `docs/<Page>--<Feature>-Workflow.md` only after the
+  feature's code passes review, citing verified line numbers and verbatim
+  snippets (see `feature-workflow-doc` skill). The doc and its feature share
+  one commit; if the feature's behavior changes later, the doc updates in the
+  same commit.
