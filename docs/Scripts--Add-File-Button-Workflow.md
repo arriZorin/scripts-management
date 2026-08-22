@@ -1,7 +1,7 @@
 # Add-File-Button Workflow
 
 **Project:** `tauri-pyscripts-scheduler`  
-**Date:** 2026-08-20  
+**Date:** 2026-08-22  
 **Status:** ✅ Frontend complete — no dedicated Rust command required
 
 ---
@@ -13,7 +13,7 @@ When a user clicks the **Add File** button on the Scripts List page, the followi
 1. **Vue UI** (`ScriptsListView.vue`) calls `handleAddFile()`.
 2. **Composable** (`useScripts.ts`) orchestrates: file picker → duplicate check → repository persistence → UI refresh → dependency auto-scan.
 3. **TypeScript services** (`ScriptPicker.ts`, `pyScriptImport.ts`) adapt to native APIs.
-4. **Rust backend** supplies only the generic file I/O commands already registered (`read_text_file`, `write_text_file`, `scan_script_deps`, `compute_folder_hash`, `get_venv_python_path`, `ensure_script_venv`, `sync_script_deps`). File picking itself is handled by the Tauri dialog plugin.
+4. **Rust backend** supplies only the generic file I/O and venv commands already registered (`read_text_file`, `write_text_file`, `read_folder_requirements`, `scan_script_deps`, `write_requirements_txt`, `ensure_script_venv`, `sync_script_deps`). File picking itself is handled by the Tauri dialog plugin.
 
 The entire "Add File" path is implemented on the frontend. Persistence re-uses the existing `JsonScriptRepository` + `TauriFileStorage` layer.
 
@@ -73,8 +73,7 @@ src-tauri/
 - `scan_files` — used by the **Add Folder** path
 - `read_text_file` / `write_text_file` — used by `TauriFileStorage` for scripts.json
 - `read_folder_requirements` / `scan_script_deps` — used by the post-add dependency auto-scan
-- `compute_folder_hash` — used by `confirmDeps` to derive the venv folder
-- `get_venv_python_path` — used by `confirmDeps` to locate the venv for a folder
+- `write_requirements_txt` — used by `confirmDeps` to create requirements.txt (`lib.rs:406`)
 - `ensure_script_venv` — used by `confirmDeps` to create the venv (uv)
 - `sync_script_deps` — used by `confirmDeps` to install deps from requirements.txt
 - Dialog plugin (`tauri_plugin_dialog`) — used by the file/folder picker
@@ -108,7 +107,7 @@ Tests supply fakes at the same boundary (`useAppContext` overrides / direct `use
 
 ### Step 1 — Vue UI Layer
 
-**Location:** `src/views/ScriptsListView.vue` (button at line 12, handler at line 345)
+**Location:** `src/views/ScriptsListView.vue` (button at line 12, handler at line 348)
 
 ```vue
 <button @click="handleAddFile" class="btn btn-primary px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-500 btn-script-action" data-testid="add-file-btn">Add File</button>
@@ -180,20 +179,11 @@ async function confirmDeps() {
   const { folder, script, detected } = pendingDeps.value;
   pendingDeps.value = null;
   try {
-    // 1. Write requirements.txt
     await invoke('write_requirements_txt', { dirPath: folder, deps: detected });
-
-    // 2. Ensure the venv exists for this folder's pythonVersion
-    const folderHash = await invoke<string>('compute_folder_hash', { dirPath: folder });
-    const venvPythonPath = await invoke<string>('get_venv_python_path', {
-      folderHash,
-      pythonVersion: script.pythonVersion ?? '3.11',
-    });
-    await invoke('ensure_script_venv', { folderHash, pythonVersion: script.pythonVersion ?? '3.11' });
-
-    // 3. Sync the deps from requirements.txt into the venv
-    await invoke('sync_script_deps', { folderHash, requirements: detected });
-
+    // Ensure the venv exists in the script folder for this folder's pythonVersion
+    await invoke('ensure_script_venv', { dirPath: folder, pythonVersion: script.pythonVersion ?? '3.11' });
+    // Sync the deps from requirements.txt into the venv
+    await invoke('sync_script_deps', { dirPath: folder, requirements: detected });
     operationSummary.value = `Created requirements.txt with ${detected.length} dep(s).`;
   } catch (e) {
     error.value = typeof e === 'string' && e.trim() ? e : e instanceof Error ? e.message : 'Failed to create requirements.txt.';
@@ -203,10 +193,10 @@ async function confirmDeps() {
 
 **Why the venv creation is split across invocations:**
 
+- `write_requirements_txt(dirPath, deps)` → writes `requirements.txt` into the script folder (`ScriptsListView.vue:328`).
 - `ensure_script_venv(dirPath, pythonVersion)` → creates the venv at `<script folder>/.venv\` (uv default) if it doesn't exist. Health check first (python.exe + pyvenv.cfg + version match) — 0 subprocess cost if healthy. If recreated, the deps hash cache is cleared so `sync_script_deps` won't skip the fresh venv.
-- `get_venv_python_path(dirPath)` → returns the full path to the venv's Python executable (`<folder>/.venv/Scripts/python.exe`).
-- `sync_script_deps(dirPath, requirements)` → invokes `pip install --requirement` inside the venv using the requirements content (resolves transitive deps; internal AppData hash-cache decides skip-vs-install).
-- `compute_folder_hash` is **removed** — commands are keyed by `dirPath` directly.
+- `sync_script_deps(dirPath, requirements)` → invokes `uv pip install --requirement` inside the venv using the requirements content (resolves transitive deps; internal AppData hash-cache decides skip-vs-install).
+- Commands are keyed by `dirPath` directly — the old `compute_folder_hash` indirection is removed.
 
 This split allows the Rust layer to remain stateless and testable without a Tauri state.
 

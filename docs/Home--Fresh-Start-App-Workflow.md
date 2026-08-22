@@ -13,7 +13,7 @@ When the app launches on a machine with no prior state (or with an empty data di
 1. **Vue entry** (`src/main.ts`) mounts `App.vue`, which builds the app context (DI wiring) and the sidebar shell.
 2. **App.vue boot** (`onMounted`) records an `app startup` log entry, then runs the **one-shot runtime check**: locate `uv` (managed install dir first, then PATH), cache the `RequirementCheckResult` in a reactive ref shared by all views.
 3. **Rust setup** creates the app-local data directory (`%LOCALAPPDATA%\com.pyscriptscheduler.app`) and manages it as Tauri state; the `logs\` subdirectory is created lazily by `get_log_directory`.
-4. **Home view** (`HomeView.vue`) loads stats in parallel (scripts, tasks, runs, system info), computes the dashboard, and shows the runtime requirement panel — with a **Resolve** button that bootstraps uv (downloads the portable zip via GitHub, extracts it, verifies `uv --version`) when the check is `notMet`.
+4. **Home view** (`HomeView.vue`) loads stats in parallel (scripts, tasks, runs, system info), computes the dashboard, and shows the runtime requirement panel — with a **Resolve** button that bootstraps uv **winget-first** (silent `astral-sh.uv` install), falling back to a pinned portable zip download when winget fails or uv cannot be located, when the check is `notMet`.
 5. **Empty state** — missing JSON files (`scripts.json`, `tasks.json`, `task-runs.json`, `logs.json`) read as `null` → every repository returns `[]`, so each view shows its first-run empty state ("No scripts yet.", "No tasks yet.", "No runs yet.", "No executions yet.").
 
 The entire fresh-start path is frontend orchestration over the existing generic Rust commands (file I/O, PATH scan, registry query, download/extract, process runner). No dedicated fresh-start command was required.
@@ -40,7 +40,7 @@ src/
 │   ├── runtimeCheck/
 │   │   ├── createRuntimeRequirement.ts  ← composes the uv requirement with Tauri adapters
 │   │   ├── pythonRuntimeCheck.ts        ← check()/resolve() logic (uv-only)
-│   │   ├── uvBootstrapper.ts            ← portable-zip download + extract + verify
+│   │   ├── uvBootstrapper.ts            ← winget-first bootstrap + pinned zip fallback
 │   │   ├── environmentQuery.ts          ← PATH scan / registry / install-dir adapters
 │   │   ├── processRunner.ts             ← run_process adapter
 │   │   ├── fileDownloader.ts            ← download/extract/delete adapters
@@ -67,7 +67,7 @@ src/
 | `src/composables/useNavigation.ts` | Nav items; default view `home` |
 | `src/views/HomeView.vue` | Dashboard stats, system info, runtime panel, Resolve button |
 | `src/services/runtimeCheck/pythonRuntimeCheck.ts` | uv locate → `met` / `notMet`; `resolve()` bootstraps |
-| `src/services/runtimeCheck/uvBootstrapper.ts` | uv portable-zip bootstrap |
+| `src/services/runtimeCheck/uvBootstrapper.ts` | winget-first uv bootstrap (pinned zip fallback) |
 | `src/services/runtimeCheck/environmentQuery.ts` / `processRunner.ts` / `fileDownloader.ts` | Tauri invoke adapters |
 | `src/services/home/systemInfo.ts` / `dashboardStats.ts` | Version compare + stats |
 | `src/services/shared/TauriFileStorage.ts` | `read_text_file` → `null` when file absent |
@@ -228,9 +228,9 @@ private async locateUv(): Promise<string | null> {
 
 The app never probes host Python directly — Python version management is delegated to uv (`pythonRuntimeCheck.ts:7-13`).
 
-### Step 2b — Resolve: uv Bootstrap
+### Step 2b — Resolve: uv Bootstrap (winget-first)
 
-**Location:** `src/views/HomeView.vue:62-81` (button) → `src/services/runtimeCheck/uvBootstrapper.ts:17-34`
+**Location:** `src/views/HomeView.vue:62-81` (button) → `src/services/runtimeCheck/uvBootstrapper.ts:39-51`
 
 ```ts
 async resolveRuntime() {
@@ -249,29 +249,29 @@ async resolveRuntime() {
 
 ```ts
 async bootstrap(installDir: string): Promise<string> {
-  const tempZip = joinPath(installDir, `uv-${Date.now()}.zip`)
-  await this.downloader.downloadToFile(UV_ZIP_URL, tempZip)
-  try {
-    await this.downloader.extractZip(tempZip, installDir)
+  const managedUv = joinPath(installDir, 'uv.exe')
 
-    const uvPath = joinPath(installDir, 'uv.exe')
-    const versionResult = await this.processRunner.run(uvPath, ['--version'])
-    if (versionResult.exitCode !== 0) {
-      throw new Error(`Bootstrap produced a uv.exe that does not run: ${versionResult.standardError}`)
-    }
-    return uvPath
-  } finally {
-    await this.downloader.deleteFile(tempZip).catch(() => {})
-  }
+  // 1. Idempotent skip: an existing, runnable uv is good enough.
+  if (await this.runs(managedUv)) return managedUv
+
+  // 2. Primary: winget (silent, machine-native).
+  const wingetPath = await this.tryWinget(installDir)
+  if (wingetPath !== null) return wingetPath
+
+  // 3. Fallback ("failed strategy"): pinned portable zip.
+  return this.installFromZip(installDir)
 }
 ```
 
 **Behaviour:**
 
-1. Download `https://github.com/astral.sh/uv/releases/latest/download/uv-x86_64-pc-windows-msvc.zip` (`UV_ZIP_URL`, `uvBootstrapper.ts:4`) to a temp zip in the install dir.
-2. Extract into `%LOCALAPPDATA%\Programs\uv` (path-traversal-safe extraction, `systeminfo.rs:175-205`).
-3. Verify `uv.exe --version` runs with exit code 0.
-4. Delete the temp zip; the result becomes `met` with `resolvedPath` = the managed `uv.exe`.
+1. **Skip** — if `uv.exe --version` in the managed dir exits 0, return it immediately (re-running resolve after a success is a no-op).
+2. **winget** — `winget install --id astral-sh.uv -e --accept-source-agreements --accept-package-agreements --disable-interactivity` (120s timeout). On success, re-locate uv in the managed dir or on PATH (`findAllInPath`), verifying each candidate runs.
+3. **Zip fallback** — only when winget failed or uv is not locatable: download the **pinned** portable zip (`UV_VERSION = '0.12.5'`) from the **astral CDN mirror** (`releases.astral.sh/github/uv/...`, `UV_ZIP_URL`) with the github.com versioned URL (`UV_ZIP_URL_FALLBACK`) as backup, extract into `%LOCALAPPDATA%\Programs\uv` (path-traversal-safe extraction, `systeminfo.rs:175-205`).
+4. Verify `uv.exe --version` runs with exit code 0.
+5. Delete the temp zip; the result becomes `met` with `resolvedPath` = the managed `uv.exe`. If all sources fail, the throw surfaces as status `failed` ("Failed to bootstrap uv.") with the last download error as detail.
+
+**Why winget-first:** github.com `/releases/latest/download/` URLs are non-reproducible and have 404'd on real networks (observed 2026-08-22) while astral's own CDN mirror and winget keep working — so the strategy prefers machine-native winget, then the mirror, and only touches github.com as a last resort. Version pinning makes the fallback reproducible and debuggable.
 
 ### Step 3 — Rust SystemInfo Commands (the native primitives)
 
@@ -349,7 +349,7 @@ Each view's `onMounted` loads its own data (ScriptsListView `loadAndReconcile` a
 | Startup log entry (`app startup`) | ✅ Implemented (`App.vue:62`) |
 | One-shot cached runtime check | ✅ Implemented (`pythonRuntimeCheck.ts:25`) |
 | uv locate (managed dir → PATH) | ✅ Implemented (`pythonRuntimeCheck.ts:75`) |
-| uv bootstrap resolve (zip download + extract + verify) | ✅ Implemented (`uvBootstrapper.ts:17`) |
+| uv bootstrap resolve (winget-first + pinned zip fallback) | ✅ Implemented (`uvBootstrapper.ts:39`) |
 | Home dashboard + system info + runtime panel | ✅ Implemented (`HomeView.vue:46`) |
 | Empty states for all views | ✅ Implemented |
 | Unit tests | ✅ Implemented (`pythonRuntimeCheck.test.ts`, `uvBootstrapper.test.ts`, `systemInfo.test.ts`, `dashboardStats.test.ts`, `HomeView.test.ts`) |
@@ -368,5 +368,5 @@ Each view's `onMounted` loads its own data (ScriptsListView `loadAndReconcile` a
 
 - `architecture.md` — Full system architecture
 - `README.md` — Project overview and setup instructions
-- `docs/Page/Scripts/Add-File-Button-Workflow.md` — first content creation path after a fresh start
-- `docs/Page/Task/New-Task-Button-Workflow.md` — task creation (uses the uv-managed Python runtime resolved at startup)
+- `docs/Scripts--Add-File-Button-Workflow.md` — first content creation path after a fresh start
+- `docs/Task--New-Task-Button-Workflow.md` — task creation (uses the uv-managed Python runtime resolved at startup)

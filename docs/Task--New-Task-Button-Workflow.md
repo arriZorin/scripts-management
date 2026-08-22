@@ -283,7 +283,7 @@ async create(task: Task, script: Script): Promise<void> {
 3. `ensure_script_venv` — idempotent: health check (`python.exe` + `pyvenv.cfg` + version match); recreates from scratch when unhealthy (and clears the deps hash cache so sync won't skip).
 4. `sync_script_deps` — `uv pip install --requirement` (resolves transitive deps; AppData hash cache decides skip-vs-install).
 5. Resolve the venv interpreter path and the app log directory.
-6. Invoke `create_scheduled_task` with the Windows task name `PyscriptScheduler\\<taskId>` (`taskWindowsName`, `src/models/Task.ts:105`).
+6. Invoke `create_scheduled_task` with the Windows task name `PyscriptScheduler\\<taskId>` (`taskWindowsName`, `src/models/Task.ts:107`; namespace constant `TASK_WINDOWS_NAMESPACE` at `Task.ts:105`).
 
 The schedule is mapped to the Rust payload in `schedulePayload()` (lines 67–77):
 
@@ -404,4 +404,4 @@ pub fn create_task(spec: &CreateTaskSpec) -> Result<String, String> {
 
 - `architecture.md` — Full system architecture
 - `README.md` — Project overview and setup instructions
-- `docs/Page/Scripts/Add-File-Button-Workflow.md` — the Add File flow (venv creation details shared with this flow)
+- `docs/Scripts--Add-File-Button-Workflow.md` — the Add File flow (venv creation details shared with this flow)
